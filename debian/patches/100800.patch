@@ -1,0 +1,116 @@
+Index: virtualbox/src/VBox/Additions/linux/drm/vbox_fb.c
+===================================================================
+--- virtualbox.orig/src/VBox/Additions/linux/drm/vbox_fb.c
++++ virtualbox/src/VBox/Additions/linux/drm/vbox_fb.c
+@@ -197,7 +197,7 @@
+ 	.fb_check_var = drm_fb_helper_check_var,
+ 	.fb_set_par = drm_fb_helper_set_par,
+ #if RTLNX_VER_MIN(6,5,0)
+-	__FB_DEFAULT_SYS_OPS_DRAW,
++	FB_DEFAULT_SYS_OPS,
+ #else
+ 	.fb_fillrect = drm_fb_helper_sys_fillrect,
+ 	.fb_copyarea = drm_fb_helper_sys_copyarea,
+@@ -374,6 +374,10 @@
+ 			       sizes->fb_height);
+ #endif
+ 
++#if RTLNX_VER_MIN(6,5,0)
++	info->screen_buffer = (char *)bo->kmap.virtual;
++	info->fix.smem_start = page_to_phys(vmalloc_to_page(bo->kmap.virtual));
++#endif
+ 	info->screen_base = (char __iomem *)bo->kmap.virtual;
+ 	info->screen_size = size;
+ 
+@@ -382,6 +386,14 @@
+ 	info->fix.smem_len = info->screen_size;
+ # endif
+ 	info->fbdefio = &vbox_defio;
++# if RTLNX_VER_MIN(5,19,0)
++	ret = fb_deferred_io_init(info);
++	if (ret)
++	{
++		DRM_ERROR("failed to initialize deferred io: %d\n", ret);
++		return ret;
++	}
++# endif
+ 	fb_deferred_io_init(info);
+ #endif
+ 
+@@ -512,8 +524,7 @@
+ 	struct fb_info *fbdev = VBOX_FBDEV_INFO(vbox->fbdev->helper);
+ 
+ #if RTLNX_VER_MIN(6,3,0) || RTLNX_RHEL_MAJ_PREREQ(9,3)
+-    fbdev->fix.smem_start =
+-pci_resource_start(VBOX_DRM_TO_PCI_DEV(vbox->fbdev->helper.dev), 0) + gpu_addr;
++        fbdev->fix.smem_start = pci_resource_start(VBOX_DRM_TO_PCI_DEV(vbox->fbdev->helper.dev), 0) + gpu_addr;
+ #else
+ 	fbdev->fix.smem_start = fbdev->apertures->ranges[0].base + gpu_addr;
+ #endif
+Index: virtualbox/src/VBox/Additions/linux/drm/vbox_mode.c
+===================================================================
+--- virtualbox.orig/src/VBox/Additions/linux/drm/vbox_mode.c
++++ virtualbox/src/VBox/Additions/linux/drm/vbox_mode.c
+@@ -869,6 +869,16 @@
+ 	vbox->cursor_data_size = data_size;
+ 	dst = vbox->cursor_data;
+ 
++#if RTLNX_VER_MIN(6,4,0)
++	/* Make sure bo is in SYSTEM (main) memory, so we can access it directly. */
++	ret = vbox_bo_pin(bo, VBOX_MEM_TYPE_SYSTEM, NULL);
++	if (ret)
++	{
++		DRM_ERROR("cannot pin bo to main memory\n");
++		goto out_bo_unpin;
++	}
++#endif
++
+ #if RTLNX_VER_MIN(5,14,0) || RTLNX_RHEL_RANGE(8,6, 8,99)
+ 	ret = ttm_bo_kmap(&bo->bo, 0, VBOX_BO_RESOURCE_NUM_PAGES(bo->bo.resource), &uobj_map);
+ #elif RTLNX_VER_MIN(5,12,0) || RTLNX_RHEL_MAJ_PREREQ(8,5)
+@@ -900,6 +910,10 @@
+ 
+ out_unmap_bo:
+ 	ttm_bo_kunmap(&uobj_map);
++#if RTLNX_VER_MIN(6,4,0)
++out_bo_unpin:
++	vbox_bo_unpin(bo);
++#endif
+ out_unreserve_bo:
+ 	vbox_bo_unreserve(bo);
+ out_unref_obj:
+Index: virtualbox/src/VBox/Additions/linux/drm/vbox_ttm.c
+===================================================================
+--- virtualbox.orig/src/VBox/Additions/linux/drm/vbox_ttm.c
++++ virtualbox/src/VBox/Additions/linux/drm/vbox_ttm.c
+@@ -363,6 +363,19 @@
+ 	struct ttm_operation_ctx *ctx, struct ttm_resource *new_mem,
+ 	struct ttm_place *hop)
+ {
++# if RTLNX_VER_MIN(6,4,0)
++	if (!bo->resource)
++	{
++		if (new_mem->mem_type != TTM_PL_SYSTEM)
++		{
++			hop->mem_type = TTM_PL_SYSTEM;
++			hop->flags = TTM_PL_FLAG_TEMPORARY;
++			return -EMULTIHOP;
++		}
++		ttm_bo_move_null(bo, new_mem);
++		return 0;
++	}
++# endif
+ 	return ttm_bo_move_memcpy(bo, ctx, new_mem);
+ }
+ #endif
+@@ -576,6 +589,10 @@
+ static const struct drm_gem_object_funcs vbox_drm_gem_object_funcs = {
+ 	.free   = vbox_gem_free_object,
+ 	.print_info = drm_gem_ttm_print_info,
++# if RTLNX_VER_MIN(6,5,0)
++	.vmap	= drm_gem_ttm_vmap,
++	.vunmap	= drm_gem_ttm_vunmap,
++# endif
+ # if RTLNX_VER_MIN(5,14,0) || RTLNX_RHEL_RANGE(8,6, 8,99)
+ 	.mmap = drm_gem_ttm_mmap,
+ # endif
