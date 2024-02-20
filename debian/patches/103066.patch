@@ -1,0 +1,80 @@
+Index: src/VBox/Runtime/common/log/log.cpp
+===================================================================
+--- a/src/VBox/Runtime/common/log/log.cpp	(revision 103065)
++++ b/src/VBox/Runtime/common/log/log.cpp	(revision 103066)
+@@ -548,7 +548,7 @@
+         uint32_t const fFlags = RT_LO_U16(fFlagsAndGroup);
+         uint16_t const iGroup = RT_HI_U16(fFlagsAndGroup);
+         if (   iGroup != UINT16_MAX
+-            && (   (pLoggerInt->afGroups[iGroup < pLoggerInt->cGroups ? iGroup : 0] & (fFlags | RTLOGGRPFLAGS_ENABLED))
++            && (   (*(pLoggerInt->afGroups + (iGroup < pLoggerInt->cGroups ? iGroup : 0)) & (fFlags | RTLOGGRPFLAGS_ENABLED))
+                 != (fFlags | RTLOGGRPFLAGS_ENABLED)))
+             pLoggerInt = NULL;
+     }
+@@ -1555,7 +1555,7 @@
+     pLoggerInt->fFlags |= RTLOGFLAGS_DISABLED;
+     iGroup = pLoggerInt->cGroups;
+     while (iGroup-- > 0)
+-        pLoggerInt->afGroups[iGroup] = 0;
++        *(pLoggerInt->afGroups + iGroup) = 0;
+ 
+     /*
+      * Flush it.
+@@ -1788,9 +1788,9 @@
+             for (i = 0; i < pLoggerInt->cGroups; i++)
+             {
+                 if (fEnabled)
+-                    pLoggerInt->afGroups[i] |= fFlags;
++                    *(pLoggerInt->afGroups + i) |= fFlags;
+                 else
+-                    pLoggerInt->afGroups[i] &= ~fFlags;
++                    *(pLoggerInt->afGroups + i) &= ~fFlags;
+             }
+         }
+         else
+@@ -4158,7 +4158,7 @@
+         || !pszFormat || !*pszFormat)
+         return VINF_LOG_DISABLED;
+     if (    iGroup != ~0U
+-        &&  (pLoggerInt->afGroups[iGroup] & (fFlags | RTLOGGRPFLAGS_ENABLED)) != (fFlags | RTLOGGRPFLAGS_ENABLED))
++        &&  (*(pLoggerInt->afGroups + iGroup) & (fFlags | RTLOGGRPFLAGS_ENABLED)) != (fFlags | RTLOGGRPFLAGS_ENABLED))
+         return VINF_LOG_DISABLED;
+ 
+     /*
+Index: src/VBox/Runtime/r0drv/linux/memobj-r0drv-linux.c
+===================================================================
+--- a/src/VBox/Runtime/r0drv/linux/memobj-r0drv-linux.c	(revision 103065)
++++ b/src/VBox/Runtime/r0drv/linux/memobj-r0drv-linux.c	(revision 103066)
+@@ -425,7 +425,7 @@
+         {
+             fContiguous = true;
+             for (iPage = 0; iPage < cPages; iPage++)
+-                pMemLnx->apPages[iPage] = &paPages[iPage];
++                *(pMemLnx->apPages + iPage) = &paPages[iPage];
+         }
+         else if (fContiguous)
+         {
+@@ -441,11 +441,11 @@
+          *        IPRT_USE_APPLY_TO_PAGE_RANGE_FOR_EXEC. */
+         for (iPage = 0; iPage < cPages; iPage++)
+         {
+-            pMemLnx->apPages[iPage] = alloc_page(fFlagsLnx | __GFP_NOWARN);
+-            if (RT_UNLIKELY(!pMemLnx->apPages[iPage]))
++            *(pMemLnx->apPages + iPage) = alloc_page(fFlagsLnx | __GFP_NOWARN);
++            if (RT_UNLIKELY(!*(pMemLnx->apPages + iPage)))
+             {
+                 while (iPage-- > 0)
+-                    __free_page(pMemLnx->apPages[iPage]);
++                    __free_page(*(pMemLnx->apPages + iPage));
+                 rtR0MemObjDelete(&pMemLnx->Core);
+                 return rcNoMem;
+             }
+@@ -622,7 +622,7 @@
+     {
+         size_t iPage = pMemLnx->cPages;
+         while (iPage-- > 0)
+-            if (PageHighMem(pMemLnx->apPages[iPage]))
++            if (PageHighMem(*(pMemLnx->apPages + iPage)))
+             {
+                 fMustMap = true;
+                 break;

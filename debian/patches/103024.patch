@@ -1,0 +1,101 @@
+Index: include/iprt/string.h
+===================================================================
+--- a/include/iprt/string.h	(revision 103023)
++++ b/include/iprt/string.h	(revision 103024)
+@@ -245,33 +245,7 @@
+ # define RT_BCOPY_UNFORTIFIED(a_pDst, a_pSrc, a_cbToCopy)   memcpy((a_pDst), (a_pSrc), (a_cbToCopy))
+ #endif /* !RT_OS_LINUX && !__KERNEL__ */
+ 
+-/** @def RT_STRSCPY
+- * Copy string and NULL-terminate output buffer.
+- *
+- * This macro should mostly be used in Linux kernel code. This is
+- * the replacement for deprecated strlcpy. It was deprecated since 4.3.0
+- * when strscpy was introduced as an alternative. Finally, strlcpy was
+- * completely removed from kernel code in 6.8.0.
+- *
+- * @param   a_pDst          Pointer to the destination string buffer.
+- * @param   a_pSrc          Pointer to the source NULL-terminated string buffer.
+- * @param   a_cbDst         Size of destination buffer.
+- */
+-#if defined(RT_OS_LINUX) && defined(__KERNEL__)
+-# if (RTLNX_VER_MIN(4,3,0))
+-#  define RT_STRSCPY(a_pDst, a_pSrc, a_cbDst) \
+-    { \
+-      ssize_t _ret; \
+-      _ret = strscpy((a_pDst), (a_pSrc), (a_cbDst)); \
+-    }
+-# else /* < 4.3.0 */
+-#  define RT_STRSCPY(a_pDst, a_pSrc, a_cbDst)   strlcpy((a_pDst), (a_pSrc), (a_cbDst))
+-# endif
+-#else  /* !RT_OS_LINUX && !__KERNEL__ */
+-# define RT_STRSCPY(a_pDst, a_pSrc, a_cbDst)    strlcpy((a_pDst), (a_pSrc), (a_cbDst))
+-#endif /* !RT_OS_LINUX && !__KERNEL__ */
+ 
+-
+ #ifdef IN_RING3
+ 
+ /**
+Index: src/VBox/Additions/common/VBoxGuest/VBoxGuest-linux.c
+===================================================================
+--- a/src/VBox/Additions/common/VBoxGuest/VBoxGuest-linux.c	(revision 103023)
++++ b/src/VBox/Additions/common/VBoxGuest/VBoxGuest-linux.c	(revision 103024)
+@@ -1410,8 +1410,7 @@
+             RTLogGroupSettings(pLogger, pszValue);
+     }
+     else if (pParam->name[0] != 'd')
+-        RT_STRSCPY(&g_szLogGrp[0], pszValue, sizeof(g_szLogGrp));
+-
++        RTStrCopy(&g_szLogGrp[0], sizeof(g_szLogGrp), pszValue);
+     return 0;
+ }
+ 
+@@ -1436,7 +1435,7 @@
+             RTLogFlags(pLogger, pszValue);
+     }
+     else if (pParam->name[0] != 'd')
+-        RT_STRSCPY(&g_szLogFlags[0], pszValue, sizeof(g_szLogFlags));
++        RTStrCopy(&g_szLogFlags[0], sizeof(g_szLogFlags), pszValue);
+     return 0;
+ }
+ 
+@@ -1461,7 +1460,7 @@
+             RTLogDestinations(pLogger, pszValue);
+     }
+     else if (pParam->name[0] != 'd')
+-        RT_STRSCPY(&g_szLogDst[0], pszValue, sizeof(g_szLogDst));
++        RTStrCopy(&g_szLogDst[0], sizeof(g_szLogDst), pszValue);
+     return 0;
+ }
+ 
+Index: src/VBox/Additions/linux/sharedfolders/vfsmod.c
+===================================================================
+--- a/src/VBox/Additions/linux/sharedfolders/vfsmod.c	(revision 103023)
++++ b/src/VBox/Additions/linux/sharedfolders/vfsmod.c	(revision 103024)
+@@ -1408,7 +1408,7 @@
+     switch (opt) {
+     case Opt_iocharset:
+     case Opt_nls:
+-        RT_STRSCPY(info->nls_name, param->string, sizeof(info->nls_name));
++        RTStrCopy(info->nls_name, sizeof(info->nls_name), param->string);
+         break;
+     case Opt_uid:
+         info->uid = result.uint_32;
+@@ -1469,7 +1469,7 @@
+             printk(KERN_WARNING "vboxsf: cache mode (%u) is out of range, using default instead.\n", result.uint_32);
+         break;
+     case Opt_tag:
+-        RT_STRSCPY(info->szTag, param->string, sizeof(info->szTag));
++        RTStrCopy(info->szTag, sizeof(info->szTag), param->string);
+         break;
+     default:
+         return invalf(fc, "Invalid mount option: '%s'", param->key);
+@@ -1528,7 +1528,7 @@
+     }
+ 
+     /* fc->source (the shared folder name) is set after vbsf_init_fs_ctx() */
+-    RT_STRSCPY(info->name, fc->source, sizeof(info->name));
++    RTStrCopy(info->name, sizeof(info->name), fc->source);
+ 
+ # if RTLNX_VER_MAX(5,3,0)
+     return vfs_get_super(fc, vfs_get_independent_super, vbsf_read_super_aux);

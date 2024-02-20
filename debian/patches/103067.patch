@@ -1,0 +1,66 @@
+Index: src/VBox/Additions/linux/sharedfolders/vfsmod.c
+===================================================================
+--- a/src/VBox/Additions/linux/sharedfolders/vfsmod.c	(revision 103066)
++++ b/src/VBox/Additions/linux/sharedfolders/vfsmod.c	(revision 103067)
+@@ -473,8 +473,7 @@
+ 
+         path->u16Length = 1;
+         path->u16Size = 2;
+-        path->String.utf8[0] = '/';
+-        path->String.utf8[1] = 0;
++        RTStrCopy(path->String.utf8, path->u16Size, "/");
+ 
+         /*
+          * Stat the root directory (for inode info).
+Index: src/VBox/Additions/linux/sharedfolders/dirops.c
+===================================================================
+--- a/src/VBox/Additions/linux/sharedfolders/dirops.c	(revision 103066)
++++ b/src/VBox/Additions/linux/sharedfolders/dirops.c	(revision 103067)
+@@ -492,7 +492,7 @@
+             cchSrcName = pEntry->name.u16Length;
+             AssertLogRelBreak(offEntryInBuf + RT_UOFFSETOF(SHFLDIRINFO, name.String) + cbSrcName <= cbValid);
+             AssertLogRelBreak(cchSrcName < cbSrcName);
+-            AssertLogRelBreak(pEntry->name.String.ach[cchSrcName] == '\0');
++            AssertLogRelBreak(*(pEntry->name.String.ach + cchSrcName) == '\0');
+ 
+             /*
+              * Filter out '.' and '..' entires.
+@@ -500,7 +500,7 @@
+             if (   cchSrcName > 2
+                 || pEntry->name.String.ach[0] != '.'
+                 || (   cchSrcName == 2
+-                    && pEntry->name.String.ach[1] != '.')) {
++                    && *(pEntry->name.String.ach + 1) != '.')) {
+                 int const   d_type = vbsf_get_d_type(pEntry->Info.Attr.fMode);
+                 ino_t const d_ino  = (ino_t)offPos + 0xbeef; /* very fake */
+                 bool        fContinue;
+Index: src/VBox/Additions/linux/sharedfolders/utils.c
+===================================================================
+--- a/src/VBox/Additions/linux/sharedfolders/utils.c	(revision 103066)
++++ b/src/VBox/Additions/linux/sharedfolders/utils.c	(revision 103067)
+@@ -1047,9 +1047,9 @@
+         RT_BCOPY_UNFORTIFIED(&tmp->String.utf8[0], d_name, d_len + 1);
+     else {
+         RT_BCOPY_UNFORTIFIED(&tmp->String.utf8[0], p_name, p_len);
+-        tmp->String.utf8[p_len] = '/';
+-        RT_BCOPY_UNFORTIFIED(&tmp->String.utf8[p_len + 1], d_name, d_len);
+-        tmp->String.utf8[p_len + 1 + d_len] = '\0';
++        *(tmp->String.utf8 + p_len) = '/';
++        RT_BCOPY_UNFORTIFIED(tmp->String.utf8 + p_len + 1, d_name, d_len);
++        *(tmp->String.utf8 + p_len + 1 + d_len) = '\0';
+     }
+ 
+     *result = tmp;
+Index: include/VBox/VBoxGuestLibSharedFoldersInline.h
+===================================================================
+--- a/include/VBox/VBoxGuestLibSharedFoldersInline.h	(revision 103066)
++++ b/include/VBox/VBoxGuestLibSharedFoldersInline.h	(revision 103067)
+@@ -1505,7 +1505,7 @@
+             pReq->StrPath.u16Length = (uint16_t)cchPath;
+             pReq->StrPath.u16Size   = (uint16_t)cchPath + 1;
+             RT_BCOPY_UNFORTIFIED(pReq->StrPath.String.ach, pszPath, cchPath);
+-            pReq->StrPath.String.ach[cchPath] = '\0';
++            *(pReq->StrPath.String.ach + cchPath) = '\0';
+ 
+             {
+                 int vrc = VbglR0SfHostReqReadLinkContig(idRoot, pvBuf, PhysBuffer, cbBuffer, pReq);

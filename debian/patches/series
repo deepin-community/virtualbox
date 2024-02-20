@@ -15,3 +15,12 @@
 36-fix-vnc-version-string.patch
 37-do-not-run-if-not-in-vm.patch
 gcc-13.patch
+102989.patch
+102990.patch
+102992.patch
+102993.patch
+102994.patch
+102999.patch
+103024.patch
+103066.patch
+103067.patch
