@@ -1,3 +1,30 @@
+virtualbox (7.0.14-dfsg-2) unstable; urgency=medium
+
+  * Cherry-pick upstream fixes for kernel 6.8 and USBSAN (LP: #2053024
+    LP: #2037082, Closes: #1061917)
+  * debian/patches:
+    - 102989.patch
+    - 102990.patch
+    - 102992.patch
+    - 102993.patch
+    - 102994.patch
+    - 102999.patch
+    - 103024.patch
+    - 103066.patch
+    - 103067.patch
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Mon, 19 Feb 2024 16:43:37 +0100
+
+virtualbox (7.0.14-dfsg-1) unstable; urgency=medium
+
+  * Bump kbuild dependency to fix an SDL related build failure
+  * Update get-orig-source.sh script
+  * New upstream version 7.0.14-dfsg
+  * Update copyright years
+  * Refresh patches
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Wed, 17 Jan 2024 09:59:13 +0100
+
 virtualbox (7.0.12-dfsg-1) unstable; urgency=medium
 
   * New upstream version 7.0.12-dfsg
