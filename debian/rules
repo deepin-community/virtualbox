@@ -192,7 +192,7 @@ endif
 	dh_shlibdeps --remaining-packages
 
 override_dh_compress:
-	dh_compress -X.pdf
+	dh_compress -X.pdf -X.qhc -X.qch
 
 override_dh_auto_clean:
 	dh_auto_clean
