@@ -24,3 +24,4 @@ gcc-13.patch
 103024.patch
 103066.patch
 103067.patch
+fix-kernel-build.patch
