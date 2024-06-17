@@ -5,7 +5,7 @@ Maintainer: Debian Virtualbox Team <team+debian-virtualbox@tracker.debian.org>
 Uploaders: Ritesh Raj Sarraf <rrs@debian.org>,
            Gianfranco Costamagna <locutusofborg@debian.org>
 Build-Depends: bzip2,
-               debhelper-compat (= 12),
+               debhelper-compat (= 13),
                default-jdk,
                jaxws,
                dh-python,
@@ -25,7 +25,7 @@ Build-Depends: bzip2,
                libdevmapper-dev,
                libdrm-dev,
                libegl1-mesa-dev,
-               libgl1-mesa-dev,
+               libgl-dev,
                libglu1-mesa-dev,
                libgsoap-dev,
                liblzf-dev,
@@ -77,9 +77,8 @@ Build-Depends: bzip2,
                xsltproc,
                yasm,
                zlib1g-dev
-X-Python-Version: >= 2.5
-Standards-Version: 4.6.1
-Rules-Requires-Root: binary-targets
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
 Homepage: https://www.virtualbox.org
 Vcs-Browser: https://salsa.debian.org/pkg-virtualbox-team/virtualbox
 Vcs-Git: https://salsa.debian.org/pkg-virtualbox-team/virtualbox.git
@@ -154,7 +153,7 @@ Section: contrib/kernel
 Architecture: amd64
 Depends: build-essential,
          bzip2,
-         debhelper-compat (= 12),
+         debhelper-compat (= 13),
          kbuild,
          module-assistant,
          ${misc:Depends}
@@ -174,6 +173,8 @@ Description: x86 virtualization solution - kernel module source
 
 Package: virtualbox-guest-x11
 Section: contrib/x11
+Replaces: virtualbox-guest-x11-hwe (<< 7.0.16-dfsg-5)
+Breaks: virtualbox-guest-x11-hwe (<< 7.0.16-dfsg-5)
 Architecture: amd64 i386
 Depends: libnotify-bin,
          x11-xserver-utils,
@@ -194,6 +195,8 @@ Description: x86 virtualization solution - X11 guest utilities
 
 Package: virtualbox-guest-utils
 Architecture: amd64 i386
+Replaces: virtualbox-guest-utils-hwe (<< 7.0.16-dfsg-5)
+Breaks: virtualbox-guest-utils-hwe (<< 7.0.16-dfsg-5)
 Depends: adduser,
          pciutils,
          ${misc:Depends},
@@ -211,3 +214,21 @@ Description: x86 virtualization solution - non-X11 guest utilities
  utilities are meant to be run inside the virtual machine.
  They provide closer integration and allow to share data through shared folders
  between the host system and the virtual machine.
+
+Package: virtualbox-guest-x11-hwe
+Section: contrib/oldlibs
+Architecture: amd64 i386
+Depends: virtualbox-guest-x11,
+         ${misc:Depends}
+Description: transitional package for virtualbox-guest-x11
+ This is a transitional package for virtualbox-guest-x11.
+ It can safely be removed
+
+Package: virtualbox-guest-utils-hwe
+Section: contrib/oldlibs
+Architecture: amd64 i386
+Depends: virtualbox-guest-utils,
+         ${misc:Depends}
+Description: transitional package for virtualbox-guest-utils
+ This is a transitional package for virtualbox-guest-utils.
+ It can safely be removed
