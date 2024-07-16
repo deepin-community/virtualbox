@@ -1,3 +1,9 @@
+virtualbox (7.0.18-dfsg-2deepin1) unstable; urgency=medium
+
+  * No source change upload against python 3.12.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Tue, 16 Jul 2024 10:49:11 +0800
+
 virtualbox (7.0.18-dfsg-2) unstable; urgency=medium
 
   * Set back R^3: no
