@@ -145,6 +145,9 @@
 # include "ExtPackManagerImpl.h"
 #endif
 
+/** The TPM PPI MMIO base default (compatible with qemu). */
+#define TPM_PPI_MMIO_BASE_DEFAULT UINT64_C(0xfed45000)
+
 
 /*********************************************************************************************************************************
 *   Internal Functions                                                                                                           *
@@ -1928,6 +1931,58 @@ int Console::i_configConstructorInner(PUVM pUVM, PVM pVM, PCVMMR3VTABLE pVMM, Au
                                              N_("Invalid graphics controller type '%d'"), enmGraphicsController);
         }
 
+#if defined(VBOX_WITH_TPM)
+        /*
+         * Configure the Trusted Platform Module.
+         */
+        ComObjPtr<ITrustedPlatformModule> ptrTpm;
+        TpmType_T enmTpmType = TpmType_None;
+
+        hrc = pMachine->COMGETTER(TrustedPlatformModule)(ptrTpm.asOutParam());              H();
+        hrc = ptrTpm->COMGETTER(Type)(&enmTpmType);                                         H();
+        if (enmTpmType != TpmType_None)
+        {
+            InsertConfigNode(pDevices, "tpm", &pDev);
+            InsertConfigNode(pDev,     "0", &pInst);
+            InsertConfigInteger(pInst, "Trusted", 1); /* boolean */
+            InsertConfigNode(pInst,    "Config", &pCfg);
+            InsertConfigNode(pInst,    "LUN#0", &pLunL0);
+
+            switch (enmTpmType)
+            {
+                case TpmType_v1_2:
+                case TpmType_v2_0:
+                    InsertConfigString(pLunL0, "Driver",               "TpmEmuTpms");
+                    InsertConfigNode(pLunL0,   "Config", &pCfg);
+                    InsertConfigInteger(pCfg, "TpmVersion", enmTpmType == TpmType_v1_2 ? 1 : 2);
+                    InsertConfigNode(pLunL0, "AttachedDriver", &pLunL1);
+                    InsertConfigString(pLunL1, "Driver", "NvramStore");
+                    break;
+                case TpmType_Host:
+#if defined(RT_OS_LINUX) || defined(RT_OS_WINDOWS)
+                    InsertConfigString(pLunL0, "Driver",               "TpmHost");
+                    InsertConfigNode(pLunL0,   "Config", &pCfg);
+#endif
+                    break;
+                case TpmType_Swtpm:
+                    hrc = ptrTpm->COMGETTER(Location)(bstr.asOutParam());                   H();
+                    InsertConfigString(pLunL0, "Driver",               "TpmEmu");
+                    InsertConfigNode(pLunL0,   "Config", &pCfg);
+                    InsertConfigString(pCfg,   "Location", bstr);
+                    break;
+                default:
+                    AssertFailedBreak();
+            }
+
+            /* Add the device for the physical presence interface. */
+            InsertConfigNode(   pDevices, "tpm-ppi",  &pDev);
+            InsertConfigNode(   pDev,     "0",        &pInst);
+            InsertConfigInteger(pInst,    "Trusted",  1); /* boolean */
+            InsertConfigNode(   pInst,    "Config",   &pCfg);
+            InsertConfigInteger(pCfg,     "MmioBase", TPM_PPI_MMIO_BASE_DEFAULT);
+        }
+#endif
+
         /*
          * Firmware.
          */
@@ -2115,6 +2170,9 @@ int Console::i_configConstructorInner(PUVM pUVM, PVM pVM, PCVMMR3VTABLE pVMM, Au
                 InsertConfigInteger(pCfg, "DmiUseHostInfo", 1);
                 InsertConfigInteger(pCfg, "DmiExposeMemoryTable", 1);
             }
+
+            if (enmTpmType != TpmType_None)
+                InsertConfigInteger(pCfg, "TpmPpiBase", TPM_PPI_MMIO_BASE_DEFAULT);
 
             /* Attach the NVRAM storage driver. */
             InsertConfigNode(pInst,    "LUN#0",     &pLunL0);
@@ -3539,51 +3597,6 @@ int Console::i_configConstructorInner(PUVM pUVM, PVM pVM, PCVMMR3VTABLE pVMM, Au
             }
         }
 #endif /* VBOX_WITH_DRAG_AND_DROP */
-
-#if defined(VBOX_WITH_TPM)
-        /*
-         * Configure the Trusted Platform Module.
-         */
-        ComObjPtr<ITrustedPlatformModule> ptrTpm;
-        TpmType_T enmTpmType = TpmType_None;
-
-        hrc = pMachine->COMGETTER(TrustedPlatformModule)(ptrTpm.asOutParam());              H();
-        hrc = ptrTpm->COMGETTER(Type)(&enmTpmType);                                         H();
-        if (enmTpmType != TpmType_None)
-        {
-            InsertConfigNode(pDevices, "tpm", &pDev);
-            InsertConfigNode(pDev,     "0", &pInst);
-            InsertConfigInteger(pInst, "Trusted", 1); /* boolean */
-            InsertConfigNode(pInst,    "Config", &pCfg);
-            InsertConfigNode(pInst,    "LUN#0", &pLunL0);
-
-            switch (enmTpmType)
-            {
-                case TpmType_v1_2:
-                case TpmType_v2_0:
-                    InsertConfigString(pLunL0, "Driver",               "TpmEmuTpms");
-                    InsertConfigNode(pLunL0,   "Config", &pCfg);
-                    InsertConfigInteger(pCfg, "TpmVersion", enmTpmType == TpmType_v1_2 ? 1 : 2);
-                    InsertConfigNode(pLunL0, "AttachedDriver", &pLunL1);
-                    InsertConfigString(pLunL1, "Driver", "NvramStore");
-                    break;
-                case TpmType_Host:
-#if defined(RT_OS_LINUX) || defined(RT_OS_WINDOWS)
-                    InsertConfigString(pLunL0, "Driver",               "TpmHost");
-                    InsertConfigNode(pLunL0,   "Config", &pCfg);
-#endif
-                    break;
-                case TpmType_Swtpm:
-                    hrc = ptrTpm->COMGETTER(Location)(bstr.asOutParam());                   H();
-                    InsertConfigString(pLunL0, "Driver",               "TpmEmu");
-                    InsertConfigNode(pLunL0,   "Config", &pCfg);
-                    InsertConfigString(pCfg,   "Location", bstr);
-                    break;
-                default:
-                    AssertFailedBreak();
-            }
-        }
-#endif
 
         /*
          * ACPI
@@ -6203,6 +6216,17 @@ int Console::i_configNetwork(const char *pszDevice,
                         close(iSock);
                     }
                 }
+#  ifdef VBOXNETFLT_LINUX_NAMESPACE_SUPPORT
+                RTUUID IfaceUuid;
+                Bstr IfId;
+                hrc = hostInterface->COMGETTER(Id)(IfId.asOutParam());                      H();
+                vrc = RTUuidFromUtf16(&IfaceUuid, IfId.raw());
+                AssertRCReturn(vrc, vrc);
+                char szTrunkNameWithNamespace[INTNET_MAX_TRUNK_NAME];
+                RTStrPrintf(szTrunkNameWithNamespace, sizeof(szTrunkNameWithNamespace), "%u/%s",
+                            IfaceUuid.au32[0], pszTrunk);
+                pszTrunk = szTrunkNameWithNamespace;
+#  endif
 
 # else
 #  error "PORTME (VBOX_WITH_NETFLT)"

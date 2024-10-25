@@ -703,7 +703,8 @@ DECLHIDDEN(uint64_t) vusbRhR3ProcessFrame(PVUSBROOTHUB pThis, bool fCallback)
     uint64_t tsNanoStart = RTTimeNanoTS();
 
     /* Don't do anything if we are not supposed to process anything (EHCI and XHCI). */
-    if (!pThis->uFrameRateDefault)
+    if (   !pThis->uFrameRateDefault
+        || ASMAtomicReadBool(&pThis->fSavingState))
         return 0;
 
     if (ASMAtomicXchgBool(&pThis->fFrameProcessing, true))
@@ -1348,15 +1349,16 @@ static DECLCALLBACK(int) vusbR3RhSavePrep(PPDMDRVINS pDrvIns, PSSMHANDLE pSSM)
     LogFlow(("vusbR3RhSavePrep:\n"));
     RT_NOREF(pSSM);
 
+    ASMAtomicXchgBool(&pThis->fSavingState, true);
+
     /*
      * Detach all proxied devices.
      */
-    RTCritSectEnter(&pThis->CritSectDevices);
 
     /** @todo we a) can't tell which are proxied, and b) this won't work well when continuing after saving! */
     for (unsigned i = 0; i < RT_ELEMENTS(pThis->apDevByPort); i++)
     {
-        PVUSBDEV pDev = pThis->apDevByPort[i];
+        PVUSBDEV pDev = vusbR3RhGetVUsbDevByPortRetain(pThis, i, "SavePrep");
         if (pDev)
         {
             if (!VUSBIDevIsSavedStateSupported(&pDev->IDevice))
@@ -1369,12 +1371,12 @@ static DECLCALLBACK(int) vusbR3RhSavePrep(PPDMDRVINS pDrvIns, PSSMHANDLE pSSM)
                  * This will work fine even if the save fails since the Done handler is
                  * called unconditionally if the Prep handler was called.
                  */
+                Assert(!pThis->apDevByPort[i]);
                 pThis->apDevByPort[i] = pDev;
+                vusbDevRelease(pDev, "SavePrep");
             }
         }
     }
-
-    RTCritSectLeave(&pThis->CritSectDevices);
 
     /*
      * Kill old load data which might be hanging around.
@@ -1423,6 +1425,7 @@ static DECLCALLBACK(int) vusbR3RhSaveDone(PPDMDRVINS pDrvIns, PSSMHANDLE pSSM)
             vusbHubAttach(pThis, pDev);
     }
 
+    ASMAtomicXchgBool(&pThis->fSavingState, false);
     return VINF_SUCCESS;
 }
 

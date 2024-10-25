@@ -216,7 +216,7 @@ static pgprot_t rtR0MemObjLinuxConvertProt(unsigned fProt, bool fKernel)
 #if defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64)
             if (fKernel)
             {
-# if RTLNX_VER_MIN(6,6,0)
+# if RTLNX_VER_MIN(6,6,0) || RTLNX_SUSE_MAJ_PREREQ(15, 6)
                 /* In kernel 6.6 mk_pte() macro was fortified with additional
                  * check which does not allow to use our custom mask anymore
                  * (see kernel commit ae1f05a617dcbc0a732fbeba0893786cd009536c).
@@ -1367,7 +1367,7 @@ DECLHIDDEN(int) rtR0MemObjNativeLockUser(PPRTR0MEMOBJINTERNAL ppMem, RTR3PTR R3P
                                 fWrite,                 /* force write access. */
 # endif
                                 &pMemLnx->apPages[0]    /* Page array. */
-# if GET_USER_PAGES_API < KERNEL_VERSION(6, 5, 0)
+# if GET_USER_PAGES_API < KERNEL_VERSION(6, 5, 0) && !RTLNX_SUSE_MAJ_PREREQ(15, 6)
                                 , papVMAs               /* vmas */
 # endif
                                 );
@@ -1413,10 +1413,8 @@ DECLHIDDEN(int) rtR0MemObjNativeLockUser(PPRTR0MEMOBJINTERNAL ppMem, RTR3PTR R3P
                                 fWrite,                 /* Write to memory. */
                                 fWrite,                 /* force write access. */
 # endif
-                                &pMemLnx->apPages[0]    /* Page array. */
-# if GET_USER_PAGES_API < KERNEL_VERSION(6, 5, 0)
-                                , papVMAs               /* vmas */
-# endif
+                                &pMemLnx->apPages[0],    /* Page array. */
+                                papVMAs               /* vmas */
                                 );
 #endif /* GET_USER_PAGES_API < KERNEL_VERSION(4, 6, 0) */
         if (rc == cPages)
@@ -1440,7 +1438,7 @@ DECLHIDDEN(int) rtR0MemObjNativeLockUser(PPRTR0MEMOBJINTERNAL ppMem, RTR3PTR R3P
             while (rc-- > 0)
             {
                 flush_dcache_page(pMemLnx->apPages[rc]);
-# if GET_USER_PAGES_API < KERNEL_VERSION(6, 5, 0)
+# if GET_USER_PAGES_API < KERNEL_VERSION(6, 5, 0) && !RTLNX_SUSE_MAJ_PREREQ(15, 6) && !RTLNX_RHEL_RANGE(9,5, 9,99)
 #  if RTLNX_VER_MIN(6,3,0)
                 vm_flags_set(papVMAs[rc], VM_DONTCOPY | VM_LOCKED);
 #  else
@@ -1923,7 +1921,7 @@ DECLHIDDEN(int) rtR0MemObjNativeMapUser(PPRTR0MEMOBJINTERNAL ppMem, RTR0MEMOBJ p
                     /* Thes flags help making 100% sure some bad stuff wont happen (swap, core, ++).
                      * See remap_pfn_range() in mm/memory.c */
 
-#if    RTLNX_VER_MIN(6,3,0)
+#if    RTLNX_VER_MIN(6,3,0) || RTLNX_RHEL_RANGE(9,5, 9,99)
                     vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 #elif  RTLNX_VER_MIN(3,7,0)
                     vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;

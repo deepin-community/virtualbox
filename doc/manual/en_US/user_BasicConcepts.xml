@@ -96,9 +96,10 @@
         <para>
           <emphasis role="bold">Platforms With Limited
           Support.</emphasis> These legacy guest OS platforms can be
-          used with &product-name;, but only qualify for <emphasis>best
-          effort</emphasis> support. Therefore, resolution of customer
-          issues is not guaranteed. See
+          used with &product-name;, but only qualify for limited
+          support because of the vintage of the technology involved.
+          Therefore, resolution of customer issues for such legacy
+          guest OS platforms cannot be assured. See
           <xref linkend="table-limited-support"/>.
         </para>
       </listitem>

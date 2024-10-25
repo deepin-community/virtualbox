@@ -590,7 +590,7 @@ int ShClConvUtf16LFToCRLFA(PCRTUTF16 pcwszSrc, size_t cwcSrc,
     PRTUTF16 pwszDst = NULL;
     size_t   cchDst;
 
-    int rc = ShClUtf16LFLenUtf8(pcwszSrc, cwcSrc, &cchDst);
+    int rc = ShClUtf16CalcNormalizedEolToCRLFLength(pcwszSrc, cwcSrc, &cchDst);
     if (RT_SUCCESS(rc))
     {
         pwszDst = (PRTUTF16)RTMemAlloc((cchDst + 1 /* Leave space for terminator */) * sizeof(RTUTF16));
@@ -760,7 +760,7 @@ int ShClConvUtf16ToUtf8HTML(PCRTUTF16 pcwszSrc, size_t cwcSrc, char **ppszDst, s
     return rc;
 }
 
-int ShClUtf16LFLenUtf8(PCRTUTF16 pcwszSrc, size_t cwSrc, size_t *pchLen)
+int ShClUtf16CalcNormalizedEolToCRLFLength(PCRTUTF16 pcwszSrc, size_t cwSrc, size_t *pchLen)
 {
     AssertPtrReturn(pcwszSrc, VERR_INVALID_POINTER);
     AssertPtrReturn(pchLen, VERR_INVALID_POINTER);
@@ -778,12 +778,18 @@ int ShClUtf16LFLenUtf8(PCRTUTF16 pcwszSrc, size_t cwSrc, size_t *pchLen)
     for (; i < cwSrc; ++i, ++cLen)
     {
         /* Check for a single line feed */
-        if (pcwszSrc[i] == VBOX_SHCL_LINEFEED)
+        if (   pcwszSrc[i] == VBOX_SHCL_LINEFEED
+            && (i == 0 || pcwszSrc[i - 1] != VBOX_SHCL_CARRIAGERETURN))
+        {
             ++cLen;
+        }
 #ifdef RT_OS_DARWIN
         /* Check for a single carriage return (MacOS) */
-        if (pcwszSrc[i] == VBOX_SHCL_CARRIAGERETURN)
+        if (   pcwszSrc[i] == VBOX_SHCL_CARRIAGERETURN
+            && (i + 1 >= cwSrc || pcwszSrc[i + 1] != VBOX_SHCL_LINEFEED))
+        {
             ++cLen;
+        }
 #endif
         if (pcwszSrc[i] == 0)
         {
@@ -832,79 +838,63 @@ int ShClUtf16CRLFLenUtf8(PCRTUTF16 pcwszSrc, size_t cwSrc, size_t *pchLen)
     return VINF_SUCCESS;
 }
 
-int ShClConvUtf16LFToCRLF(PCRTUTF16 pcwszSrc, size_t cwcSrc, PRTUTF16 pu16Dst, size_t cwDst)
+int ShClConvUtf16LFToCRLF(PCRTUTF16 pcwszSrc, size_t cwcSrc, PRTUTF16 pu16Dst, size_t cwcDst)
 {
     AssertPtrReturn(pcwszSrc, VERR_INVALID_POINTER);
     AssertPtrReturn(pu16Dst, VERR_INVALID_POINTER);
-    AssertReturn(cwDst, VERR_INVALID_PARAMETER);
+    AssertReturn(cwcDst, VERR_INVALID_PARAMETER);
 
     AssertMsgReturn(pcwszSrc[0] != VBOX_SHCL_UTF16BEMARKER,
                     ("Big endian UTF-16 not supported yet\n"), VERR_NOT_SUPPORTED);
 
-    int rc = VINF_SUCCESS;
-
     /* Don't copy the endian marker. */
-    size_t i = pcwszSrc[0] == VBOX_SHCL_UTF16LEMARKER ? 1 : 0;
-    size_t j = 0;
-
-    for (; i < cwcSrc; ++i, ++j)
+    size_t      offDst = 0;
+    for (size_t offSrc = pcwszSrc[0] == VBOX_SHCL_UTF16LEMARKER ? 1 : 0; offSrc < cwcSrc; ++offSrc, ++offDst)
     {
+        /* Ensure more output space: */
+        if (offDst < cwcDst) { /* likely */ }
+        else return VERR_BUFFER_OVERFLOW;
+
         /* Don't copy the null byte, as we add it below. */
-        if (pcwszSrc[i] == 0)
+        if (pcwszSrc[offSrc] == 0)
             break;
 
-        /* Not enough space in destination? */
-        if (j == cwDst)
+        /* Check for newlines not preceeded by carriage return: "\n" -> "\r\n";  but not "\r\n" to "\r\r\n"! */
+        if (   pcwszSrc[offSrc] == VBOX_SHCL_LINEFEED
+            && (offSrc == 0 || pcwszSrc[offSrc - 1] != VBOX_SHCL_CARRIAGERETURN))
         {
-            rc = VERR_BUFFER_OVERFLOW;
-            break;
-        }
+            pu16Dst[offDst++] = VBOX_SHCL_CARRIAGERETURN;
 
-        if (pcwszSrc[i] == VBOX_SHCL_LINEFEED)
-        {
-            pu16Dst[j] = VBOX_SHCL_CARRIAGERETURN;
-            ++j;
-
-            /* Not enough space in destination? */
-            if (j == cwDst)
-            {
-                rc = VERR_BUFFER_OVERFLOW;
-                break;
-            }
+            /* Ensure sufficient output space: */
+            if (offDst < cwcDst) { /* likely */ }
+            else return VERR_BUFFER_OVERFLOW;
         }
 #ifdef RT_OS_DARWIN
-        /* Check for a single carriage return (MacOS) */
-        else if (pcwszSrc[i] == VBOX_SHCL_CARRIAGERETURN)
+        /* Check for a carriage return not followed by newline (MacOS): "\r" -> "\n\r";  but not "\r\n" to "\r\n\n"! */
+        else if (   pcwszSrc[offSrc] == VBOX_SHCL_CARRIAGERETURN
+                 && (offSrc + 1 >= cwcSrc || pcwszSrc[offSrc + 1] != VBOX_SHCL_LINEFEED))
         {
-            /* Set CR.r */
-            pu16Dst[j] = VBOX_SHCL_CARRIAGERETURN;
-            ++j;
+            pu16Dst[offDst++] = VBOX_SHCL_CARRIAGERETURN;
 
-            /* Not enough space in destination? */
-            if (j == cwDst)
-            {
-                rc = VERR_BUFFER_OVERFLOW;
-                break;
-            }
+            /* Ensure more output space: */
+            if (offDst < cwcDst) { /* likely */ }
+            else return VERR_BUFFER_OVERFLOW;
 
             /* Add line feed. */
-            pu16Dst[j] = VBOX_SHCL_LINEFEED;
+            pu16Dst[offDst] = VBOX_SHCL_LINEFEED;
             continue;
         }
 #endif
-        pu16Dst[j] = pcwszSrc[i];
+        pu16Dst[offDst] = pcwszSrc[offSrc];
     }
 
-    if (j == cwDst)
-        rc = VERR_BUFFER_OVERFLOW;
-
-    if (RT_SUCCESS(rc))
+    /* Add terminator. */
+    if (offDst < cwcDst)
     {
-        /* Add terminator. */
-        pu16Dst[j] = 0;
+        pu16Dst[offDst] = 0;
+        return VINF_SUCCESS;
     }
-
-    return rc;
+    return VERR_BUFFER_OVERFLOW;
 }
 
 int ShClConvUtf16CRLFToLF(PCRTUTF16 pcwszSrc, size_t cwcSrc, PRTUTF16 pu16Dst, size_t cwDst)

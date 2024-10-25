@@ -73,6 +73,55 @@ Rules for adding a changelog entry to make them look more uniform:
                            So, we use chapter and xpointer="xpointer(/chapter/)" with xi:include. -->
   <sect1>
 
+    <title>Version 7.0.20 (2024-07-16)</title>
+
+    <para>This is a maintenance release. The following items were fixed and/or
+      added:</para>
+
+    <itemizedlist>
+
+      <listitem>
+       <para>TPM: Fixed errors appearing the event viewer with Windows guests</para>
+      </listitem>
+
+      <listitem>
+       <para>macOS Hosts: Fixed passing USB devices to the VM (bug #21218)</para>
+      </listitem>
+
+      <listitem>
+       <para>Audio: Fixed recording with HDA emulation after newer Windows 10 / 11
+         guests got rebooted</para>
+      </listitem>
+
+      <listitem>
+       <para>USB: Fixed a deadlock in OHCI triggered when saving the current state of a VM
+         or taking a snapshot (bug #22059)</para>
+      </listitem>
+
+      <listitem>
+       <para>Linux Guest and Host: Introduced initial support for
+         OpenSuse 15.6 kernel</para>
+      </listitem>
+
+      <listitem>
+       <para>Linux Guest and Host: Introduced initial support for
+         RHEL 9.5 kernel (bug #22099)</para>
+      </listitem>
+
+      <listitem>
+       <para>Guest Additions: Shared Clipboard: Fixed issue when extra new lines were
+         pasted when copying text between Win and X11 (bug #21716)</para>
+      </listitem>
+
+      <listitem>
+       <para>UEFI Secure Boot: Add new Microsoft certificates to list for new VMs</para>
+      </listitem>
+
+    </itemizedlist>
+  </sect1>
+
+  <sect1>
+
     <title>Version 7.0.18 (2024-05-07)</title>
 
     <para>This is a maintenance release. The following items were fixed and/or

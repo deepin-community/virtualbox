@@ -2056,7 +2056,7 @@ PCHDEFS  += $(CDEFS)
 OBJCDEFS += $(CDEFS)
 
 USES += dtrace
-USES.win += vboximportchecker
+USES.win += vboximportchecker vboxsetpeversion
 
 
 #
@@ -4047,6 +4047,7 @@ ifdef VBOX_SIGNING_MODE
  VBOX_RETRY    ?= $(ASH) $(KBUILD_DEVTOOLS)/bin/retry.sh
  # temporary solution for a $(dir ...) equivalent which assumes that it gets a single path, possibly with spaces.
  VBOX_DIRX = $(subst ?,$(SP),$(dir $(subst $(SP),?,$1)))
+ VBOX_NOTDIRX = $(subst ?,$(SP),$(notdir $(subst $(SP),?,$1)))
  # Corp code signing client.
  VBOX_CCS_CLIENT_JAR := $(firstword $(rsort \
  	$(wildcard $(KBUILD_DEVTOOLS)/common/ccs/v*/Client.jar)) \
@@ -4272,10 +4273,10 @@ ifdef VBOX_SIGNING_MODE
   # Since the corp code signing cannot dual signing and doesn't even have a
   # SHA-1 cert, we have to get creative:
   #   1. Sign $1 using local SHA-1 certificate.
-  #   2. Make temporary copy of $1 as $1.ccs
-  #   3. Do SHA-256 corp code signing of $1.ccs
-  #   4. Add the SHA-256 signature from $1.ccs to $1 using bldRTSignTool.
-  #   5. Delete $1.ccs.
+  #   2. Make temporary copy of $1 as $1.dual
+  #   3. Do SHA-256 corp code signing of $1
+  #   4. Add the SHA-256 signature from $1 to $1.dual using bldRTSignTool.
+  #   5. Move $1.dual to $1.
   #
   # @param 1  The file to sign.
   # @param 2  File description. Optional.
@@ -4295,11 +4296,11 @@ ifdef VBOX_SIGNING_MODE
   	$(3) \
   	"$(1)" \
   	$(if-expr "$5" == "", \
-  	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(RM) -f -- "$1.ccs" \
-  	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(CP) -- "$1" "$1.ccs" \
-  	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(call VBOX_CCS_SIGN_CMD,driver$(if-expr "$3" == "/ph",_pagehash,),$1.ccs,,-digest_algo SHA2) \
-  	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(VBOX_RTSIGNTOOL) add-nested-$(if-expr "$(suffix $1)" == ".cat",cat,exe)-signature -v "$1" "$1.ccs" \
-  	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(RM) -f -- "$1.ccs" \
+  		$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(RM) -f -- "$1.dual" \
+	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(CP) -- "$1" "$1.dual" \
+	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(call VBOX_CCS_SIGN_CMD,driver$(if-expr "$3" == "/ph",_pagehash,),$1,,-digest_algo SHA2) \
+	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(VBOX_RTSIGNTOOL) add-nested-$(if-expr "$(suffix $1)" == ".cat",cat,exe)-signature -v "$1.dual" "$1" \
+	$(if-expr "$4" == "2",$$(NLTAB),$(NLTAB))$(MV) -f -- "$1.dual" "$1" \
   	,)
 
   ## Sign an executable image.
@@ -4317,7 +4318,7 @@ ifdef VBOX_SIGNING_MODE
   ## Commands for signing a driver image after link.
   if $(intersects win_planb,$(VBOX_WITH_CORP_CODE_SIGNING))
    VBOX_SIGN_DRIVER_CMDS      ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_PLAN_B_FN,$(out),,/ph,2))
-   VBOX_SIGN_DRIVER_ORDERDEPS ?= $(VBOX_RTSIGNTOOL) $(VBOX_SIGNTOOL_ORDERDEPS)
+   VBOX_SIGN_DRIVER_ORDERDEPS ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_RTSIGNTOOL) $(VBOX_SIGNTOOL_ORDERDEPS))
   else
    VBOX_SIGN_DRIVER_CMDS      ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_FN,$(out),,2))
    VBOX_SIGN_DRIVER_ORDERDEPS ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_SIGN_IMAGE_ORDERDEPS))
@@ -4349,8 +4350,13 @@ ifdef VBOX_SIGNING_MODE
   # Go nuts, sign everything.
   if "$(VBOX_SIGNING_MODE)" == "release" || defined(VBOX_WITH_HARDENING)
    ## Commands for signing an executable or a dll image after link.
-   VBOX_SIGN_IMAGE_CMDS           ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_FN,$(out),,2))
-   VBOX_SIGN_IMAGE_CMDS_ORDERDEPS ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_SIGN_IMAGE_ORDERDEPS))
+   if defined(VBOX_CERTIFICATE_SUBJECT_NAME) && $(intersects win_planb_strict,$(VBOX_WITH_CORP_CODE_SIGNING))
+    VBOX_SIGN_IMAGE_CMDS           ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_PLAN_B_FN,$(out),,/ph,2))
+    VBOX_SIGN_IMAGE_CMDS_ORDERDEPS ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_RTSIGNTOOL) $(VBOX_SIGNTOOL_ORDERDEPS))
+   else
+    VBOX_SIGN_IMAGE_CMDS           ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_FN,$(out),,2))
+    VBOX_SIGN_IMAGE_CMDS_ORDERDEPS ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_SIGN_IMAGE_ORDERDEPS))
+   endif
   endif
   ## Enable signing of the additions drivers, i.e. create CAT files.
   ## @todo r=bird: This bugger is entirely misplaced, as it belongs in the additions config section so it can be properly overriden.
@@ -4555,8 +4561,9 @@ ifdef VBOX_SIGNING_MODE
   ## Notarize a file (usually DMG, can also be PKG). Used with corp code signing only.
   # @param 1  The file to notarize.
   # @param 2  Identifier, mandatory.
+  # @param 3  The directory to put the notarized file in. Defaults to $(dir $1).
   if $(intersects darwin darwin_notarize all 1,$(VBOX_WITH_CORP_CODE_SIGNING))
-   VBOX_NOTARIZE_FILE_FN = $(call MSG_TOOL,SIGNTOOL,,$(1),$(2))$(NLTAB)$(call VBOX_CCS_NOTARIZE_CMD,$(1),$(2))
+   VBOX_NOTARIZE_FILE_FN = $(call MSG_TOOL,SIGNTOOL,,$(1),$(2))$(NLTAB)$(call VBOX_CCS_NOTARIZE_CMD,$(1),$(2),$(3))
   endif
 
   ## @def VBOX_TEST_SIGN_KEXT
@@ -8376,13 +8383,11 @@ ifeq ($(KBUILD_TARGET),win)
  # Similarly, for XP64 and 64-bit W2K3 we need to make sure the subsystem version
  # in the binaries are set to 5.2.  The Visual C++ 2019 linker defaults to 6.0.
  # HACK ALERT! Double expansion of $$(NLTAB).
- TEMPLATE_VBoxGuestR3ExeBase_USES.win                      = $(TEMPLATE_VBoxR3StaticBase_USES.win) vboximportchecker
+ TEMPLATE_VBoxGuestR3ExeBase_USES.win                      = $(TEMPLATE_VBoxR3StaticBase_USES.win) vboximportchecker vboxsetpeversion
  TEMPLATE_VBoxGuestR3ExeBase_VBOX_IMPORT_CHECKER.win.x86   = nt31
  TEMPLATE_VBoxGuestR3ExeBase_VBOX_IMPORT_CHECKER.win.amd64 = xp64
- TEMPLATE_VBoxGuestR3ExeBase_POST_CMDS.win.x86   = $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_PE_SET_VERSION) $(out)$$(NLTAB)$(TEMPLATE_$(TEMPLATE_VBoxGuestR3ExeBase_EXTENDS)_POST_CMDS))
- TEMPLATE_VBoxGuestR3ExeBase_LNK_DEPS.win.x86    = $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_PE_SET_VERSION))
- TEMPLATE_VBoxGuestR3ExeBase_POST_CMDS.win.amd64 = $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_PE_SET_VERSION) $(out)$$(NLTAB)$(TEMPLATE_$(TEMPLATE_VBoxGuestR3ExeBase_EXTENDS)_POST_CMDS))
- TEMPLATE_VBoxGuestR3ExeBase_LNK_DEPS.win.amd64  = $(if $(eq $(tool_do),LINK_LIBRARY),,$(VBOX_PE_SET_VERSION))
+ TEMPLATE_VBoxGuestR3ExeBase_VBOX_SET_PE_VERSION.win.x86   = default
+ TEMPLATE_VBoxGuestR3ExeBase_VBOX_SET_PE_VERSION.win.amd64 = default
  ifdef VBOX_WITH_NOCRT_STATIC
   TEMPLATE_VBoxGuestR3ExeBase_LDFLAGS.win.x86   = $(TEMPLATE_$(TEMPLATE_VBoxGuestR3ExeBase_EXTENDS)_LDFLAGS.win.x86) -NoOptIData
  else
@@ -8523,13 +8528,13 @@ endif
 TEMPLATE_VBoxGuestR3DllMinW2K = VBox Guest User Dynamic Libraries w/ IPRT and VBGL.
 TEMPLATE_VBoxGuestR3DllMinW2K_EXTENDS  = VBoxGuestR3Dll
 TEMPLATE_VBoxGuestR3DllMinW2K_VBOX_IMPORT_CHECKER.win.x86 = w2k
+TEMPLATE_VBoxGuestR3DllMinW2K_VBOX_SET_PE_VERSION.win.x86 = w2k
 ifeq ($(KBUILD_TARGET),win)
  ifdef VBOX_WITH_NOCRT_STATIC
   TEMPLATE_VBoxGuestR3DllMinW2K_LDFLAGS.win.x86 = $(filter-out -NoOptIData,$(TEMPLATE_VBoxGuestR3Dll_LDFLAGS.win.x86))
  else
   TEMPLATE_VBoxGuestR3DllMinW2K_LDFLAGS.win.x86 = $(filter-out -NoOptIData -Section:.bss$(COMMA)RW!K,$(TEMPLATE_VBoxGuestR3Dll_LDFLAGS.win.x86))
  endif
- TEMPLATE_VBoxGuestR3DllMinW2K_POST_CMDS.win.x86 = $(subst $(VBOX_PE_SET_VERSION), $(VBOX_PE_SET_VERSION) --w2k,$(TEMPLATE_VBoxGuestR3Dll_POST_CMDS.win.x86))
 endif
 
 #
@@ -8539,14 +8544,14 @@ TEMPLATE_VBoxGuestR3DllMinVista = VBox Guest User Dynamic Libraries w/ IPRT and 
 TEMPLATE_VBoxGuestR3DllMinVista_EXTENDS  = VBoxGuestR3Dll
 TEMPLATE_VBoxGuestR3DllMinVista_VBOX_IMPORT_CHECKER.win.x86   = vista
 TEMPLATE_VBoxGuestR3DllMinVista_VBOX_IMPORT_CHECKER.win.amd64 = vista
+TEMPLATE_VBoxGuestR3DllMinVista_VBOX_SET_PE_VERSION.win.x86   = vista
+TEMPLATE_VBoxGuestR3DllMinVista_VBOX_SET_PE_VERSION.win.amd64 = vista
 ifeq ($(KBUILD_TARGET),win)
  ifdef VBOX_WITH_NOCRT_STATIC
   TEMPLATE_VBoxGuestR3DllMinVista_LDFLAGS.win.x86 = $(filter-out -NoOptIData,$(TEMPLATE_VBoxGuestR3Dll_LDFLAGS.win.x86))
  else
   TEMPLATE_VBoxGuestR3DllMinVista_LDFLAGS.win.x86 = $(filter-out -NoOptIData -Section:.bss$(COMMA)RW!K,$(TEMPLATE_VBoxGuestR3Dll_LDFLAGS.win.x86))
  endif
- TEMPLATE_VBoxGuestR3DllMinVista_POST_CMDS.win.x86   = $(subst $(VBOX_PE_SET_VERSION), $(VBOX_PE_SET_VERSION) --vista,$(TEMPLATE_VBoxGuestR3Dll_POST_CMDS.win.x86))
- TEMPLATE_VBoxGuestR3DllMinVista_POST_CMDS.win.amd64 = $(subst $(VBOX_PE_SET_VERSION), $(VBOX_PE_SET_VERSION) --vista,$(TEMPLATE_VBoxGuestR3Dll_POST_CMDS.win.amd64))
 endif
 
 #
@@ -8588,14 +8593,14 @@ TEMPLATE_NewerVccVBoxGuestR3Dll_LIBS             = \
 #
 TEMPLATE_NewerVccVBoxGuestR3DllMinVista = NewerVccVBoxGuestR3Dll with the newer Visual C++ version (2013 or later).
 TEMPLATE_NewerVccVBoxGuestR3DllMinVista_EXTENDS := NewerVccVBoxGuestR3Dll
+TEMPLATE_NewerVccVBoxGuestR3DllMinVista_VBOX_SET_PE_VERSION.win.x86   := vista
+TEMPLATE_NewerVccVBoxGuestR3DllMinVista_VBOX_SET_PE_VERSION.win.amd64 := vista
 ifeq ($(KBUILD_TARGET),win)
  ifdef VBOX_WITH_NOCRT_STATIC
   TEMPLATE_NewerVccVBoxGuestR3DllMinVista_LDFLAGS.win.x86 = $(filter-out -NoOptIData,$(TEMPLATE_NewerVccVBoxGuestR3Dll_LDFLAGS.win.x86))
  else
   TEMPLATE_NewerVccVBoxGuestR3DllMinVista_LDFLAGS.win.x86 = $(filter-out -NoOptIData -Section:.bss$(COMMA)RW!K,$(TEMPLATE_NewerVccVBoxGuestR3Dll_LDFLAGS.win.x86))
  endif
- TEMPLATE_NewerVccVBoxGuestR3DllMinVista_POST_CMDS.win.x86   = $(subst $(VBOX_PE_SET_VERSION), $(VBOX_PE_SET_VERSION) --vista,$(TEMPLATE_NewerVccVBoxGuestR3Dll_POST_CMDS.win.x86))
- TEMPLATE_NewerVccVBoxGuestR3DllMinVista_POST_CMDS.win.amd64 = $(subst $(VBOX_PE_SET_VERSION), $(VBOX_PE_SET_VERSION) --vista,$(TEMPLATE_NewerVccVBoxGuestR3Dll_POST_CMDS.win.amd64))
 endif
 
 #
@@ -9011,7 +9016,7 @@ endif
 SVN                    ?= svn$(HOSTSUFF_EXE)
 VBOX_SVN_REV_KMK        = $(PATH_OUT)/revision.kmk
 ifndef VBOX_SVN_REV
- VBOX_SVN_REV_CONFIG_FALLBACK := $(patsubst %:,,  $Rev: 162950 $  )
+ VBOX_SVN_REV_CONFIG_FALLBACK := $(patsubst %:,,  $Rev: 163893 $  )
  VBOX_SVN_REV_FALLBACK := $(if-expr $(VBOX_SVN_REV_CONFIG_FALLBACK) > $(VBOX_SVN_REV_VERSION_FALLBACK),$(VBOX_SVN_REV_CONFIG_FALLBACK),$(VBOX_SVN_REV_VERSION_FALLBACK))
  VBOX_SVN_DEP          := $(firstword $(wildcard $(PATH_ROOT)/.svn/wc.db $(abspath $(PATH_ROOT)/../.svn/wc.db) $(abspath $(PATH_ROOT)/../../.svn/wc.db) $(PATH_ROOT)/.svn/entries))
  ifeq ($(which $(SVN)),)

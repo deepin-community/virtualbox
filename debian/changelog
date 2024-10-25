@@ -1,3 +1,9 @@
+virtualbox (7.0.20-dfsg-1) unstable; urgency=medium
+
+  * New upstream version 7.0.20-dfsg
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Tue, 16 Jul 2024 17:48:29 +0200
+
 virtualbox (7.0.18-dfsg-2deepin1) unstable; urgency=medium
 
   * No source change upload against python 3.12.

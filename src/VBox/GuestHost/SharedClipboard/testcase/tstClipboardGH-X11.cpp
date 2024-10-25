@@ -510,9 +510,7 @@ static void tstStringFromX11(RTTEST hTest, PSHCLX11CTX pCtx,
             {
                 if (cbActual != cbExp)
                 {
-                    RTTestFailed(hTest, "Returned string is the wrong size, string \"%.*ls\", size %u, expected \"%s\", size %u\n",
-                                 RT_MIN(TESTCASE_MAX_BUF_SIZE, cbActual), pc, cbActual,
-                                 pcszExp, cbExp);
+                    RTTestFailed(hTest, "Returned string is the wrong size: got size %u, expected %u\n", cbActual, cbExp);
                 }
                 else
                 {
@@ -710,7 +708,7 @@ int main()
     /* With an embedded CRLF */
     tstClipSetSelectionValues("text/plain;charset=UTF-8", XA_STRING,
                               "hello\r\nworld", sizeof("hello\r\nworld"), 8);
-    tstStringFromX11(hTest, &X11Ctx, "hello\r\r\nworld", VINF_SUCCESS);
+    tstStringFromX11(hTest, &X11Ctx, "hello\r\nworld", VINF_SUCCESS);
     /* With an embedded LFCR */
     tstClipSetSelectionValues("text/plain;charset=UTF-8", XA_STRING,
                               "hello\n\rworld", sizeof("hello\n\rworld"), 8);
