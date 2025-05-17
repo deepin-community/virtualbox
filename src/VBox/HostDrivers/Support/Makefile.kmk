@@ -4,7 +4,7 @@
 #
 
 #
-# Copyright (C) 2006-2023 Oracle and/or its affiliates.
+# Copyright (C) 2006-2024 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -48,13 +48,17 @@ VBOX_PATH_RUNTIME_SRC        ?= $(PATH_ROOT)/src/VBox/Runtime
 #
 # Targets
 #
-LIBRARIES += SUPR3 SUPR3Static
+if "$(KBUILD_TARGET).$(KBUILD_TARGET_ARCH)" != "linux.arm64" || defined(VBOX_WITH_STATIC_ARM64_PAGE_SHIFT) # @todo Required by LoadGenerator in the validationkit but uses PAGE_SIZE++
+ LIBRARIES += SUPR3 SUPR3Static
+endif
 if   defined(VBOX_WITH_HARDENING) \
   && !defined(VBOX_ONLY_VALIDATIONKIT)
  LIBRARIES += SUPR3HardenedStatic
 endif
 ifndef VBOX_ONLY_BUILD
- DLLS.win += VBoxSupLib
+ ifn1of ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH), win.arm64)
+  DLLS.win += VBoxSupLib
+ endif
 endif
 ifdef VBOX_WITH_32_ON_64_MAIN_API
  LIBRARIES += SUPR3-x86
@@ -115,6 +119,7 @@ VBOX_SUP_WIN_CERTS := \
 	TimeRootOracle0=Timestamp-VBoxLegacyWinCA.taf \
 	TimeRootOracle1=Timestamp-VBoxLegacyWinSha1CA.taf \
 	TrustedCertVBox0=Trusted-OracleCorporationVirtualBox-05308b76ac2e15b29720fb4395f65f38.taf \
+	TrustedCertVBox1=Trusted-OracleAmerica-060e2f8f9e1b8be518d5fe2b69cfccb1.taf \
 	AppleRoot0=AppleRoot-2bd06947947609fef46b8d2e40a6f7474d7f085e.taf \
 	AppleRoot1=AppleRoot-G2-c499136c1803c27bc0a3a00d7f72807a1c77268d.taf
 # Hack Alert! Because the DigiCert cross signing certificate we use expired 2020-04-15, we add it as a trusted NT kernel
@@ -128,12 +133,12 @@ VBOX_SUP_WIN_CERT_NAMES := $(foreach cert,$(VBOX_SUP_WIN_CERTS),$(firstword $(su
 # 1=name, 2=filter, 3=buildcert?.
 if "$(KBUILD_TARGET)" == "win" && defined(VBOX_WITH_HARDENING)
  VBOX_SUP_GEN_CERT_MACRO = 'SUPTAENTRY const g_aSUP$(1)TAs[] =' '{' \
- 	$(if-expr "$(3)" == "",,'    SUPTAENTRY_GEN(g_abSUPBuildCert),') \
- 	$(foreach certnm,$(filter $(2),$(VBOX_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_GEN(g_abSUP$(certnm)),') \
+ 	$(if-expr "$(3)" == "",,'    SUPTAENTRY_CER(g_abSUPBuildCert),') \
+ 	$(foreach certnm,$(filter $(2),$(VBOX_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_TAF(g_abSUP$(certnm)),') \
  	'};' 'unsigned const g_cSUP$(1)TAs = RT_ELEMENTS(g_aSUP$(1)TAs);' '' ''
 else
  VBOX_SUP_GEN_CERT_MACRO = 'SUPTAENTRY const g_aSUP$(1)TAs[] =' '{' \
- 	$(foreach certnm,$(filter $(2),$(VBOX_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_GEN(g_abSUP$(certnm)),') \
+ 	$(foreach certnm,$(filter $(2),$(VBOX_SUP_WIN_CERT_NAMES)), '    SUPTAENTRY_TAF(g_abSUP$(certnm)),') \
  	'};' 'unsigned const g_cSUP$(1)TAs = RT_ELEMENTS(g_aSUP$(1)TAs);' '' ''
 endif
 
@@ -156,6 +161,7 @@ $$(VBOX_SUP_WIN_CERTS_FILE): $(MAKEFILE_CURRENT) \
 	$(QUIET)$(APPEND) -n "$@" \
        	'' \
        	'#include <VBox/sup.h>' \
+       	'#include <iprt/crypto/store.h>' \
                ''
 	$(foreach cert,$(VBOX_SUP_WIN_CERTS), $(NLTAB)$(VBOX_BIN2C) -ascii --append --static --no-size \
 		"SUP$(firstword $(subst =,$(SP) ,$(cert)))" \
@@ -270,6 +276,7 @@ if "$(KBUILD_TARGET)" == "win" && defined(VBOX_WITH_HARDENING) && !defined(VBOX_
  	IN_DIS \
  	IN_DIS_STATIC \
  	DIS_CORE_ONLY \
+ 	VBOX_DIS_WITH_X86_AMD64 \
  	IPRT_NO_CRT \
  	RT_WITH_NOCRT_ALIASES \
  	LOG_DISABLED \
@@ -429,8 +436,9 @@ if "$(KBUILD_TARGET)" == "win" && defined(VBOX_WITH_HARDENING) && !defined(VBOX_
  	$(VBOX_PATH_RUNTIME_SRC)/generic/memsafer-generic.cpp \
  	$(VBOX_PATH_RUNTIME_SRC)/generic/uuid-generic.cpp \
  	\
- 	../../Disassembler/DisasmCore.cpp \
- 	../../Disassembler/DisasmTables.cpp \
+ 	../../Disassembler/Disasm.cpp \
+ 	../../Disassembler/DisasmCore-x86-amd64.cpp \
+ 	../../Disassembler/DisasmTables-x86-amd64.cpp \
  	../../Disassembler/DisasmTablesX64.cpp \
  	../../Disassembler/DisasmMisc.cpp
 
@@ -516,6 +524,7 @@ if1of ($(KBUILD_TARGET), linux solaris)
  	IN_DIS \
  	IN_DIS_STATIC \
  	DIS_CORE_ONLY \
+ 	VBOX_DIS_WITH_X86_AMD64 \
  	LOG_DISABLED
  SUPR3HardenedStatic_DEFS.linux += \
  	SUP_HARDENED_WITH_DLMOPEN
@@ -535,8 +544,9 @@ if1of ($(KBUILD_TARGET), linux solaris)
  	$(VBOX_PATH_RUNTIME_SRC)/common/misc/RTAssertMsg2WeakV.cpp \
  	$(VBOX_PATH_RUNTIME_SRC)/generic/RTAssertShouldPanic-generic.cpp \
  	\
- 	../../Disassembler/DisasmCore.cpp \
- 	../../Disassembler/DisasmTables.cpp \
+ 	../../Disassembler/Disasm.cpp \
+ 	../../Disassembler/DisasmCore-x86-amd64.cpp \
+ 	../../Disassembler/DisasmTables-x86-amd64.cpp \
  	../../Disassembler/DisasmTablesX64.cpp \
  	../../Disassembler/DisasmMisc.cpp
 endif
@@ -899,34 +909,36 @@ if   !defined(VBOX_ONLY_DOCS) \
  endif # linux freebsd
 
 
- ifeq ($(KBUILD_TARGET),win)
-  INSTALLS.win += VBoxSup-inf
-  VBoxSup-inf_TEMPLATE = VBoxR0DrvInfCat
-  VBoxSup-inf_SOURCES = \
-  	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf
-  VBoxSup-inf_CLEAN = $(VBoxSup-inf_SOURCES)
-  VBoxSup-inf_BLDDIRS = $(PATH_TARGET)/VBoxSupCat.dir
+ ifdef VBOX_WITH_VBOXDRV
+  ifeq ($(KBUILD_TARGET),win)
+   INSTALLS.win += VBoxSup-inf
+   VBoxSup-inf_TEMPLATE = VBoxR0DrvInfCat
+   VBoxSup-inf_SOURCES = \
+   	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf
+   VBoxSup-inf_CLEAN = $(VBoxSup-inf_SOURCES)
+   VBoxSup-inf_BLDDIRS = $(PATH_TARGET)/VBoxSupCat.dir
 
-  $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf: $(PATH_SUB_CURRENT)/win/VBoxSup.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
+   $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf: $(PATH_SUB_CURRENT)/win/VBoxSup.inf $(MAKEFILE_CURRENT) | $$(dir $$@)
 	$(call MSG_GENERATE,VBoxSup-inf,$@,$<)
 	$(call VBOX_EDIT_INF_FN,$<,$@)
 
-  ifdef VBOX_SIGNING_MODE
-   VBoxSup-inf_SOURCES += \
-   	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys \
-   	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat \
-   	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat=>VBoxSup-PreW10.cat
+   ifdef VBOX_SIGNING_MODE
+    VBoxSup-inf_SOURCES += \
+    	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys \
+    	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat \
+    	$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat=>VBoxSup-PreW10.cat
 
-   $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys: $$(VBoxDrv_1_TARGET) | $$(dir $$@)
+    $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys: $$(VBoxDrv_1_TARGET) | $$(dir $$@)
 	$(INSTALL) -m 644 -- "$<" "$(@D)"
 
-   $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat: \
-   		$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf \
-   		$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys
+    $(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.cat: \
+    		$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.inf \
+    		$(PATH_TARGET)/VBoxSupCat.dir/VBoxSup.sys
 	$(call MSG_TOOL,Inf2Cat,VBoxSup-inf,$@,$<)
 	$(call VBOX_MAKE_CAT_FN, $(@D),$@)
-  endif # signing
- endif # win
+   endif # signing
+  endif # win
+ endif # VBOX_WITH_VBOXDRV
 
  #
  # Linux only.

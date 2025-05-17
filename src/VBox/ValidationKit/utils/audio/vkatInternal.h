@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2021-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2021-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -56,6 +56,13 @@
 #include "Audio/AudioTestServiceClient.h"
 
 #include "VBoxDD.h"
+
+
+/*********************************************************************************************************************************
+*   Common defines                                                                                                               *
+*********************************************************************************************************************************/
+/** Default (failsafe) timeout (in ms). */
+#define AUDIOTEST_TIMEOUT_DEFAULT_MS   RT_MS_5MIN
 
 
 /*********************************************************************************************************************************
@@ -254,6 +261,8 @@ typedef struct AUDIOTESTENV
 {
     /** Audio testing mode. */
     AUDIOTESTMODE           enmMode;
+    /** Failsafe timeout (in ms). Defaults to AUDIOTEST_TIMEOUT_DEFAULT_MS. */
+    RTMSINTERVAL            msTimeout;
     /** Whether self test mode is active or not. */
     bool                    fSelftest;
     /** Whether skip the actual verification or not. */
@@ -376,6 +385,9 @@ extern unsigned         g_uVerbosity;
 extern bool             g_fDrvAudioDebug;
 /** DrvAudio: The debug output path. */
 extern const char      *g_pszDrvAudioDebug;
+/** Whether the host audio driver backend's caching is enabled or not. Defaults to enabled.
+ *  Only implemented for DrvHostAudioWasApi backend so far, ignored otherwise. */
+extern bool             g_fDrvHostAudioCacheEnabled;
 
 extern const VKATCMD    g_CmdTest;
 extern const VKATCMD    g_CmdVerify;
@@ -411,7 +423,7 @@ int         AudioTestDriverStackPerformSelftest(void);
 void        audioTestDriverStackDelete(PAUDIOTESTDRVSTACK pDrvStack);
 int         audioTestDriverStackInitEx(PAUDIOTESTDRVSTACK pDrvStack, PCPDMDRVREG pDrvReg, bool fEnabledIn, bool fEnabledOut, bool fWithDrvAudio);
 int         audioTestDriverStackInit(PAUDIOTESTDRVSTACK pDrvStack, PCPDMDRVREG pDrvReg, bool fWithDrvAudio);
-int         audioTestDriverStackProbe(PAUDIOTESTDRVSTACK pDrvStack, PCPDMDRVREG pDrvReg, bool fEnabledIn, bool fEnabledOut, bool fWithDrvAudio);
+int         audioTestDriverStackProbe(PAUDIOTESTDRVSTACK pDrvStack, bool fEnabledIn, bool fEnabledOut, bool fWithDrvAudio);
 int         audioTestDriverStackSetDevice(PAUDIOTESTDRVSTACK pDrvStack, PDMAUDIODIR enmDir, const char *pszDevId);
 /** @}  */
 
@@ -510,7 +522,8 @@ enum
     AUDIO_TEST_OPT_CMN_DAEMONIZE = 256,
     AUDIO_TEST_OPT_CMN_DAEMONIZED,
     AUDIO_TEST_OPT_CMN_DEBUG_AUDIO_ENABLE,
-    AUDIO_TEST_OPT_CMN_DEBUG_AUDIO_PATH
+    AUDIO_TEST_OPT_CMN_DEBUG_AUDIO_PATH,
+    AUDIO_TEST_OPT_CMN_DRVHOST_CACHE_ENABLED
 };
 
 /** For use in the option switch to handle common options. */
@@ -535,8 +548,12 @@ enum
                 g_fDrvAudioDebug = true; \
                 break; \
             \
+            case AUDIO_TEST_OPT_CMN_DRVHOST_CACHE_ENABLED: \
+                g_fDrvHostAudioCacheEnabled = a_ValueUnion.f; \
+                break; \
+            \
             case AUDIO_TEST_OPT_CMN_DEBUG_AUDIO_PATH: \
-                g_pszDrvAudioDebug = (a_ValueUnion).psz; \
+                g_pszDrvAudioDebug = a_ValueUnion.psz; \
                 break; \
             case AUDIO_TEST_OPT_CMN_DAEMONIZE: \
                 break; \

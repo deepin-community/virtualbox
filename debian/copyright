@@ -12,7 +12,7 @@ Upstream Author: Oracle Corporation
 
 Copyright:
 
-    Copyright (C) 2004-2023 Oracle Corporation
+    Copyright (C) 2004-2024 Oracle Corporation
 
     VirtualBox contains portions of QEMU which is governed by the licenses in and and
     Copyright (C) 2003-2005 Fabrice Bellard; Copyright (C) 2004-2005 Vassili Karpov (malc);
@@ -771,7 +771,7 @@ ______________
 
 COPYING file last revised:  July 22, 2022
 
-The Debian packaging is copyright 2007-2024,
+The Debian packaging is copyright 2007-2025,
  Patrick Winnertz <patrick.winnertz@skolelinux.org>,
  Daniel Baumann <daniel@debian.org>,
  Philipp Hug <debian@hug.cx>,

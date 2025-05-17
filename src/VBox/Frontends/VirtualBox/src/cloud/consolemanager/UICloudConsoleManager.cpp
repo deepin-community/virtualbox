@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2009-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2009-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -26,6 +26,7 @@
  */
 
 /* Qt includes: */
+#include <QApplication>
 #include <QDialog>
 #include <QGridLayout>
 #include <QHeaderView>
@@ -39,13 +40,14 @@
 /* GUI includes: */
 #include "QIDialogButtonBox.h"
 #include "QITreeWidget.h"
-#include "UICommon.h"
 #include "UIActionPoolManager.h"
 #include "UIExtraDataManager.h"
 #include "UIIconPool.h"
 #include "UICloudConsoleDetailsWidget.h"
 #include "UICloudConsoleManager.h"
 #include "UIMessageCenter.h"
+#include "UIShortcutPool.h"
+#include "UITranslationEventListener.h"
 #include "QIToolBar.h"
 
 
@@ -122,7 +124,7 @@ public:
 };
 
 /** QDialog extension used to acquire newly created console application parameters. */
-class UIInputDialogCloudConsoleApplication : public QIWithRetranslateUI<QDialog>
+class UIInputDialogCloudConsoleApplication : public QDialog
 {
     Q_OBJECT;
 
@@ -138,10 +140,10 @@ public:
     /** Returns application argument. */
     QString argument() const;
 
-protected:
+private slots:
 
     /** Handles translation event. */
-    virtual void retranslateUi() RT_OVERRIDE;
+    void sltRetranslateUI();
 
 private:
 
@@ -166,7 +168,7 @@ private:
 };
 
 /** QDialog extension used to acquire newly created console profile parameters. */
-class UIInputDialogCloudConsoleProfile : public QIWithRetranslateUI<QDialog>
+class UIInputDialogCloudConsoleProfile : public QDialog
 {
     Q_OBJECT;
 
@@ -180,10 +182,10 @@ public:
     /** Returns profile argument. */
     QString argument() const;
 
-protected:
+private slots:
 
     /** Handles translation event. */
-    virtual void retranslateUi() RT_OVERRIDE;
+    void sltRetranslateUI();
 
 private:
 
@@ -253,7 +255,7 @@ void UIItemCloudConsoleProfile::updateFields()
 *********************************************************************************************************************************/
 
 UIInputDialogCloudConsoleApplication::UIInputDialogCloudConsoleApplication(QWidget *pParent)
-    : QIWithRetranslateUI<QDialog>(pParent)
+    : QDialog(pParent)
     , m_pLabelName(0)
     , m_pEditorName(0)
     , m_pLabelPath(0)
@@ -280,7 +282,7 @@ QString UIInputDialogCloudConsoleApplication::argument() const
     return m_pEditorArgument->text();
 }
 
-void UIInputDialogCloudConsoleApplication::retranslateUi()
+void UIInputDialogCloudConsoleApplication::sltRetranslateUI()
 {
     setWindowTitle(UICloudConsoleManager::tr("Add Application"));
     m_pLabelName->setText(UICloudConsoleManager::tr("Name:"));
@@ -358,7 +360,9 @@ void UIInputDialogCloudConsoleApplication::prepare()
     }
 
     /* Apply language settings: */
-    retranslateUi();
+    sltRetranslateUI();
+    connect(&translationEventListener(), &UITranslationEventListener::sigRetranslateUI,
+        this, &UIInputDialogCloudConsoleApplication::sltRetranslateUI);
 
     /* Resize to suitable size: */
     const int iMinimumHeightHint = minimumSizeHint().height();
@@ -371,7 +375,7 @@ void UIInputDialogCloudConsoleApplication::prepare()
 *********************************************************************************************************************************/
 
 UIInputDialogCloudConsoleProfile::UIInputDialogCloudConsoleProfile(QWidget *pParent)
-    : QIWithRetranslateUI<QDialog>(pParent)
+    : QDialog(pParent)
     , m_pLabelName(0)
     , m_pEditorName(0)
     , m_pLabelArgument(0)
@@ -391,7 +395,7 @@ QString UIInputDialogCloudConsoleProfile::argument() const
     return m_pEditorArgument->text();
 }
 
-void UIInputDialogCloudConsoleProfile::retranslateUi()
+void UIInputDialogCloudConsoleProfile::sltRetranslateUI()
 {
     setWindowTitle(UICloudConsoleManager::tr("Add Profile"));
     m_pLabelName->setText(UICloudConsoleManager::tr("Name:"));
@@ -456,7 +460,9 @@ void UIInputDialogCloudConsoleProfile::prepare()
     }
 
     /* Apply language settings: */
-    retranslateUi();
+    sltRetranslateUI();
+    connect(&translationEventListener(), &UITranslationEventListener::sigRetranslateUI,
+            this, &UIInputDialogCloudConsoleProfile::sltRetranslateUI);
 
     /* Resize to suitable size: */
     const int iMinimumHeightHint = minimumSizeHint().height();
@@ -470,7 +476,7 @@ void UIInputDialogCloudConsoleProfile::prepare()
 
 UICloudConsoleManagerWidget::UICloudConsoleManagerWidget(EmbedTo enmEmbedding, UIActionPool *pActionPool,
                                                          bool fShowToolbar /* = true */, QWidget *pParent /* = 0 */)
-    : QIWithRetranslateUI<QWidget>(pParent)
+    : QWidget(pParent)
     , m_enmEmbedding(enmEmbedding)
     , m_pActionPool(pActionPool)
     , m_fShowToolbar(fShowToolbar)
@@ -486,19 +492,8 @@ QMenu *UICloudConsoleManagerWidget::menu() const
     return m_pActionPool->action(UIActionIndexMN_M_CloudConsoleWindow)->menu();
 }
 
-void UICloudConsoleManagerWidget::retranslateUi()
+void UICloudConsoleManagerWidget::sltRetranslateUI()
 {
-    /* Adjust toolbar: */
-#ifdef VBOX_WS_MAC
-    // WORKAROUND:
-    // There is a bug in Qt Cocoa which result in showing a "more arrow" when
-    // the necessary size of the toolbar is increased. Also for some languages
-    // the with doesn't match if the text increase. So manually adjust the size
-    // after changing the text.
-    if (m_pToolBar)
-        m_pToolBar->updateLayout();
-#endif
-
     /* Translate tree-widget: */
     m_pTreeWidget->setHeaderLabels(   QStringList()
                                    << UICloudConsoleManager::tr("Application")
@@ -792,7 +787,9 @@ void UICloudConsoleManagerWidget::prepare()
     loadSettings();
 
     /* Apply language settings: */
-    retranslateUi();
+    sltRetranslateUI();
+    connect(&translationEventListener(), &UITranslationEventListener::sigRetranslateUI,
+            this, &UICloudConsoleManagerWidget::sltRetranslateUI);
 
     /* Load cloud console stuff: */
     loadCloudConsoleStuff();
@@ -1072,11 +1069,7 @@ UIItemCloudConsoleProfile *UICloudConsoleManagerWidget::searchProfileItem(const 
 QITreeWidgetItem *UICloudConsoleManagerWidget::searchItemByDefinition(const QString &strDefinition) const
 {
     /* Parse definition: */
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     const QStringList parts = strDefinition.split('/', Qt::SkipEmptyParts);
-#else
-    const QStringList parts = strDefinition.split('/', QString::SkipEmptyParts);
-#endif
     /* Depending on parts amount: */
     switch (parts.size())
     {
@@ -1166,7 +1159,7 @@ void UICloudConsoleManagerFactory::create(QIManagerDialog *&pDialog, QWidget *pC
 *********************************************************************************************************************************/
 
 UICloudConsoleManager::UICloudConsoleManager(QWidget *pCenterWidget, UIActionPool *pActionPool)
-    : QIWithRetranslateUI<QIManagerDialog>(pCenterWidget)
+    : QIManagerDialog(pCenterWidget)
     , m_pActionPool(pActionPool)
 {
 }
@@ -1185,7 +1178,7 @@ void UICloudConsoleManager::sltHandleButtonBoxClick(QAbstractButton *pButton)
         emit sigDataChangeAccepted();
 }
 
-void UICloudConsoleManager::retranslateUi()
+void UICloudConsoleManager::sltRetranslateUI()
 {
     /* Translate window title: */
     setWindowTitle(tr("Cloud Console Manager"));
@@ -1200,6 +1193,7 @@ void UICloudConsoleManager::retranslateUi()
     button(ButtonType_Reset)->setShortcut(QString("Ctrl+Backspace"));
     button(ButtonType_Apply)->setShortcut(QString("Ctrl+Return"));
     button(ButtonType_Close)->setShortcut(Qt::Key_Escape);
+    button(ButtonType_Help)->setShortcut(UIShortcutPool::standardSequence(QKeySequence::HelpContents));
     button(ButtonType_Reset)->setToolTip(tr("Reset Changes (%1)").arg(button(ButtonType_Reset)->shortcut().toString()));
     button(ButtonType_Apply)->setToolTip(tr("Apply Changes (%1)").arg(button(ButtonType_Apply)->shortcut().toString()));
     button(ButtonType_Close)->setToolTip(tr("Close Window (%1)").arg(button(ButtonType_Close)->shortcut().toString()));
@@ -1258,7 +1252,9 @@ void UICloudConsoleManager::configureButtonBox()
 void UICloudConsoleManager::finalize()
 {
     /* Apply language settings: */
-    retranslateUi();
+    sltRetranslateUI();
+    connect(&translationEventListener(), &UITranslationEventListener::sigRetranslateUI,
+            this, &UICloudConsoleManager::sltRetranslateUI);
 }
 
 UICloudConsoleManagerWidget *UICloudConsoleManager::widget()

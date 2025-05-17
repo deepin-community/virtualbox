@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -297,8 +297,8 @@ SUPR3DECL(int) SUPR3InitEx(uint32_t fFlags, PSUPDRVSESSION *ppSession)
         CookieReq.Hdr.rc = VERR_INTERNAL_ERROR;
         strcpy(CookieReq.u.In.szMagic, SUPCOOKIE_MAGIC);
         CookieReq.u.In.u32ReqVersion = SUPDRV_IOC_VERSION;
-        const uint32_t uMinVersion = (SUPDRV_IOC_VERSION & 0xffff0000) == 0x00330000
-                                   ? 0x00330004
+        const uint32_t uMinVersion = (SUPDRV_IOC_VERSION & 0xffff0000) == 0x00340000
+                                   ? 0x00340001
                                    : SUPDRV_IOC_VERSION & 0xffff0000;
         CookieReq.u.In.u32MinVersion = uMinVersion;
         rc = suplibOsIOCtl(&g_supLibData, SUP_IOCTL_COOKIE, &CookieReq, SUP_IOCTL_COOKIE_SIZE);
@@ -1776,7 +1776,7 @@ SUPR3DECL(int) SUPR3QueryVTCaps(uint32_t *pfCaps)
 
 SUPR3DECL(bool) SUPR3IsNemSupportedWhenNoVtxOrAmdV(void)
 {
-#ifdef RT_OS_WINDOWS
+#if defined(RT_OS_WINDOWS) || defined(RT_OS_DARWIN)
     return suplibOsIsNemSupportedWhenNoVtxOrAmdV();
 #else
     return false;
@@ -1784,11 +1784,11 @@ SUPR3DECL(bool) SUPR3IsNemSupportedWhenNoVtxOrAmdV(void)
 }
 
 
-SUPR3DECL(int) SUPR3QueryMicrocodeRev(uint32_t *uMicrocodeRev)
+SUPR3DECL(int) SUPR3QueryMicrocodeRev(uint32_t *puMicrocodeRev)
 {
-    AssertPtrReturn(uMicrocodeRev, VERR_INVALID_POINTER);
+    AssertPtrReturn(puMicrocodeRev, VERR_INVALID_POINTER);
 
-    *uMicrocodeRev = 0;
+    *puMicrocodeRev = 0;
 
     int rc;
     if (!g_supLibData.fDriverless)
@@ -1809,14 +1809,19 @@ SUPR3DECL(int) SUPR3QueryMicrocodeRev(uint32_t *uMicrocodeRev)
         {
             rc = Req.Hdr.rc;
             if (RT_SUCCESS(rc))
-                *uMicrocodeRev = Req.u.Out.MicrocodeRev;
+                *puMicrocodeRev = Req.u.Out.MicrocodeRev;
         }
     }
     /*
-     * Just fail the call in driverless mode.
+     * Just fail the call in driverless mode if there is a host specific way of
+     * getting the information.
      */
     else
+#if defined(RT_OS_DARWIN) && defined(RT_ARCH_AMD64)
+        rc = suplibOsQueryMicrocodeRev(puMicrocodeRev);
+#else
         rc = VERR_SUP_DRIVERLESS;
+#endif
     return rc;
 }
 

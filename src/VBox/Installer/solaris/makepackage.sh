@@ -5,7 +5,7 @@
 #
 
 #
-# Copyright (C) 2007-2023 Oracle and/or its affiliates.
+# Copyright (C) 2007-2024 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -28,13 +28,19 @@
 
 #
 # Usage:
-#       makepackage.sh [--hardened] [--ips] $(PATH_TARGET)/install packagename {$(KBUILD_TARGET_ARCH)|neutral} $(VBOX_SVN_REV)
+#       makepackage.sh [--hardened] [--ips] [--without-VBoxBugReport] [--without-VBoxBalloonCtrl] \
+#           [--without-VBoxAutostart] [--without-vboxwebsrv] \
+#           $(PATH_TARGET)/install packagename {$(KBUILD_TARGET_ARCH)|neutral} $(VBOX_SVN_REV)
 
 
 # Parse options.
 HARDENED=""
 IPS_PACKAGE=""
 PACKAGE_SPEC="prototype"
+OPT_WITHOUT_VBoxBugReport=""
+OPT_WITHOUT_VBoxBalloonCtrl=""
+OPT_WITHOUT_VBoxAutostart=""
+OPT_WITHOUT_vboxwebsrv=""
 while [ $# -ge 1 ];
 do
     case "$1" in
@@ -45,9 +51,21 @@ do
             IPS_PACKAGE=1
             PACKAGE_SPEC="virtualbox.p5m"
             ;;
-    *)
-        break
-        ;;
+        --without-VBoxBugReport)
+            OPT_WITHOUT_VBoxBugReport="yes"
+            ;;
+        --without-VBoxBalloonCtrl)
+            OPT_WITHOUT_VBoxBalloonCtrl="yes"
+            ;;
+        --without-VBoxAutostart)
+            OPT_WITHOUT_VBoxAutostart="yes"
+            ;;
+        --without-vboxwebsrv)
+            OPT_WITHOUT_vboxwebsrv="yes"
+            ;;
+        *)
+            break
+            ;;
     esac
     shift
 done
@@ -170,8 +188,9 @@ package_spec_append_info()
 package_spec_append_content()
 {
     cd "$1"
-    # Exclude directories to not cause install-time conflicts with existing system directories
-    find . ! -type d | "$VBOX_EGREP" -v '^\./(LICENSE|prototype|makepackage\.sh|vbox\.pkginfo|postinstall\.sh|checkinstall\.sh|preremove\.sh|vbox\.space|vbox-ips.mog|virtualbox\.p5m.*)$' | LC_COLLATE=C sort | pkgproto >> "$PACKAGE_SPEC"
+    # Exclude directories to not cause install-time conflicts with existing system directories.
+    # Also exclude various unpackaged files as well as two unnecessary GTK2 shared objects.
+    find . ! -type d | "$VBOX_EGREP" -v '^\./(LICENSE|prototype|makepackage\.sh|vbox\.pkginfo|postinstall\.sh|checkinstall\.sh|preremove\.sh|vbox\.space|vbox-ips.mog|virtualbox\.p5m.*)$|libqgtk2styleVBox\.so|libqgtk2VBox\.so' | LC_COLLATE=C sort | pkgproto >> "$PACKAGE_SPEC"
     cd -
     "$VBOX_AWK" 'NF == 3 && $1 == "s" && $2 == "none" { $3="/"$3 } { print }' "$PACKAGE_SPEC" > "$PACKAGE_SPEC.tmp"
     mv -f "$PACKAGE_SPEC.tmp" "$PACKAGE_SPEC"
@@ -240,7 +259,9 @@ package_spec_fixup_content()
 
     # Manifest class action scripts
     package_spec_fixup_filelist '$3 == "/var/svc/manifest/application/virtualbox/virtualbox-webservice.xml"'    '$2 = "manifest";$6 = "sys"'
-    package_spec_fixup_filelist '$3 == "/var/svc/manifest/application/virtualbox/virtualbox-balloonctrl.xml"'   '$2 = "manifest";$6 = "sys"'
+    if [ -z "${OPT_WITHOUT_VBoxBalloonCtrl}" ]; then
+        package_spec_fixup_filelist '$3 == "/var/svc/manifest/application/virtualbox/virtualbox-balloonctrl.xml"'   '$2 = "manifest";$6 = "sys"'
+    fi
     package_spec_fixup_filelist '$3 == "/var/svc/manifest/application/virtualbox/virtualbox-zoneaccess.xml"'    '$2 = "manifest";$6 = "sys"'
 
     # Use 'root' as group so as to match attributes with the previous installation and prevent a conflict. Otherwise pkgadd bails out thinking
@@ -294,9 +315,21 @@ package_spec_append_info "$PKG_BASE_DIR"
 package_spec_append_content "$PKG_BASE_DIR"
 
 # Add hardlinks for executables to launch the 32-bit or 64-bit executable
-for f in VBoxManage VBoxSDL VBoxAutostart vboxwebsrv VBoxZoneAccess VBoxSVC VBoxBugReport VBoxBalloonCtrl VBoxTestOGL VirtualBox VirtualBoxVM vbox-img VBoxHeadless; do
-    package_spec_append_hardlink VBoxISAExec    $f  "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
+for f in VBoxManage VBoxSDL VBoxZoneAccess VBoxSVC VirtualBox VirtualBoxVM vbox-img VBoxHeadless; do
+    package_spec_append_hardlink VBoxISAExec $f "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
 done
+if [ -z "${OPT_WITHOUT_VBoxBugReport}" ]; then
+    package_spec_append_hardlink VBoxISAExec VBoxBugReport "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
+fi
+if [ -z "${OPT_WITHOUT_VBoxBalloonCtrl}" ]; then
+    package_spec_append_hardlink VBoxISAExec VBoxBalloonCtrl "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
+fi
+if [ -z "${OPT_WITHOUT_VBoxAutostart}" ]; then
+    package_spec_append_hardlink VBoxISAExec VBoxAutostart "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
+fi
+if [ -z "${OPT_WITHOUT_vboxwebsrv}" ]; then
+    package_spec_append_hardlink VBoxISAExec vboxwebsrv "$PKG_BASE_DIR" "$VBOX_INSTALLED_DIR"
+fi
 
 package_spec_fixup_content
 

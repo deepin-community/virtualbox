@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2010-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2010-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -26,10 +26,10 @@
  */
 
 /* Qt includes: */
+#include <QApplication>
 #include <QActionGroup>
 
 /* GUI includes: */
-#include "UICommon.h"
 #include "UIActionPoolManager.h"
 #include "UIExtraDataManager.h"
 #include "UIIconPool.h"
@@ -97,7 +97,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+I");
     }
@@ -135,7 +135,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+E");
     }
@@ -163,12 +163,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("ToolsGlobalMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -236,7 +230,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+T");
     }
@@ -275,7 +269,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+D");
     }
@@ -314,7 +308,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+H");
     }
@@ -353,7 +347,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+P");
     }
@@ -421,7 +415,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+X");
     }
@@ -458,7 +452,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Q");
     }
@@ -516,7 +510,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+N");
     }
@@ -555,7 +549,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+A");
     }
@@ -700,7 +694,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+N");
     }
@@ -737,7 +731,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+A");
     }
@@ -802,7 +796,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+S");
     }
@@ -837,7 +831,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+O");
     }
@@ -1030,12 +1024,6 @@ public:
 
 protected:
 
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("StartVM");
-    }
-
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -1057,17 +1045,6 @@ protected:
             }
             default:
                 break;
-        }
-    }
-
-    /** Handles state change. */
-    virtual void handleStateChange() RT_OVERRIDE
-    {
-        switch (state())
-        {
-            case 0: showMenu(); break;
-            case 1: hideMenu(); break;
-            default: break;
         }
     }
 };
@@ -1274,44 +1251,6 @@ protected:
     }
 };
 
-/** Simple action extension, used as 'Show Machine Logs' action class. */
-class UIActionSimpleManagerCommonShowMachineLogs : public UIActionSimple
-{
-    Q_OBJECT;
-
-public:
-
-    /** Constructs action passing @a pParent to the base-class. */
-    UIActionSimpleManagerCommonShowMachineLogs(UIActionPool *pParent)
-        : UIActionSimple(pParent,
-                         ":/vm_show_logs_32px.png", ":/vm_show_logs_16px.png",
-                         ":/vm_show_logs_disabled_32px.png", ":/vm_show_logs_disabled_16px.png")
-    {
-        retranslateUi();
-    }
-
-protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("LogViewer");
-    }
-
-    /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
-    {
-        return QKeySequence("Ctrl+L");
-    }
-
-    /** Handles translation event. */
-    virtual void retranslateUi() RT_OVERRIDE
-    {
-        setName(QApplication::translate("UIActionPool", "Show &Log..."));
-        setStatusTip(QApplication::translate("UIActionPool", "Show log files of selected virtual machines"));
-    }
-};
-
 /** Simple action extension, used as 'Perform Refresh' action class. */
 class UIActionSimpleManagerCommonPerformRefresh : public UIActionSimple
 {
@@ -1434,7 +1373,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+F");
     }
@@ -1669,7 +1608,7 @@ protected:
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
-        setName(QApplication::translate("UIActionPool", "&Stop"));
+        setName(QApplication::translate("UIActionPool", "Stop"));
     }
 };
 
@@ -1802,12 +1741,6 @@ public:
 
 protected:
 
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("ToolsMachineMenu");
-    }
-
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -1906,6 +1839,12 @@ protected:
         return QString("ToolsMachineLogViewer");
     }
 
+    /** Returns default shortcut. */
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
+    {
+        return QKeySequence("Ctrl+L");
+    }
+
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -1995,12 +1934,6 @@ public:
 
 protected:
 
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("SnapshotMenu");
-    }
-
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -2033,7 +1966,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+T");
     }
@@ -2074,7 +2007,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+D");
     }
@@ -2115,7 +2048,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+R");
     }
@@ -2157,7 +2090,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+P");
     }
@@ -2198,7 +2131,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+C");
     }
@@ -2228,12 +2161,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("ExtensionMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -2267,7 +2194,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+I");
     }
@@ -2308,7 +2235,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+U");
     }
@@ -2338,12 +2265,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("MediumMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -2381,7 +2302,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+A");
     }
@@ -2426,7 +2347,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("");
     }
@@ -2471,7 +2392,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+C");
     }
@@ -2516,7 +2437,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+M");
     }
@@ -2561,7 +2482,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+R");
     }
@@ -2606,7 +2527,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+L");
     }
@@ -2652,7 +2573,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+P");
     }
@@ -2698,7 +2619,7 @@ protected:
     }
 
     /** Returns standard shortcut. */
-    virtual QKeySequence standardShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence standardShortcut(UIType) const RT_OVERRIDE
     {
         return actionPool()->isTemporary() ? QKeySequence() : QKeySequence(QKeySequence::Find);
     }
@@ -2739,13 +2660,13 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+F");
     }
 
     /** Returns standard shortcut. */
-    virtual QKeySequence standardShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence standardShortcut(UIType) const RT_OVERRIDE
     {
         return actionPool()->isTemporary() ? QKeySequence() : QKeySequence(QKeySequence::Refresh);
     }
@@ -2787,12 +2708,6 @@ protected:
         return QString("Clear");
     }
 
-    /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
-    {
-        return QKeySequence();
-    }
-
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -2817,12 +2732,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("NetworkMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -2856,7 +2765,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+C");
     }
@@ -2897,7 +2806,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+R");
     }
@@ -2939,7 +2848,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+P");
     }
@@ -2980,13 +2889,13 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+F");
     }
 
     /** Returns standard shortcut. */
-    virtual QKeySequence standardShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence standardShortcut(UIType) const RT_OVERRIDE
     {
         return actionPool()->isTemporary() ? QKeySequence() : QKeySequence(QKeySequence::Refresh);
     }
@@ -3016,12 +2925,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("CloudProfileMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -3055,7 +2958,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+A");
     }
@@ -3097,7 +3000,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+I");
     }
@@ -3139,7 +3042,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+R");
     }
@@ -3182,7 +3085,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+P");
     }
@@ -3224,7 +3127,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+T");
     }
@@ -3266,15 +3169,9 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+H");
-    }
-
-    /** Returns standard shortcut. */
-    virtual QKeySequence standardShortcut(UIActionPoolType) const RT_OVERRIDE
-    {
-        return actionPool()->isTemporary() ? QKeySequence() : QKeySequence(QKeySequence::HelpContents);
     }
 
     /** Handles translation event. */
@@ -3303,12 +3200,6 @@ public:
     {}
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("CloudConsoleMenu");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -3483,7 +3374,7 @@ protected:
     }
 
     /** Returns default shortcut. */
-    virtual QKeySequence defaultShortcut(UIActionPoolType) const RT_OVERRIDE
+    virtual QKeySequence defaultShortcut(UIType) const RT_OVERRIDE
     {
         return QKeySequence("Ctrl+Shift+P");
     }
@@ -3515,12 +3406,6 @@ public:
 
 protected:
 
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("VMActivityOverviewMenu");
-    }
-
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
@@ -3545,12 +3430,6 @@ public:
     }
 
 protected:
-
-    /** Returns shortcut extra-data ID. */
-    virtual QString shortcutExtraDataID() const RT_OVERRIDE
-    {
-        return QString("VMActivityOverviewColumns");
-    }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
@@ -3604,7 +3483,7 @@ protected:
 *********************************************************************************************************************************/
 
 UIActionPoolManager::UIActionPoolManager(bool fTemporary /* = false */)
-    : UIActionPool(UIActionPoolType_Manager, fTemporary)
+    : UIActionPool(UIType_ManagerUI, fTemporary)
 {
 }
 
@@ -3661,8 +3540,6 @@ void UIActionPoolManager::preparePool()
     m_pool[UIActionIndexMN_M_Group_M_Tools_T_Activity] = new UIActionToggleManagerToolsMachineShowActivity(this);
     m_pool[UIActionIndexMN_M_Group_M_Tools_T_FileManager] = new UIActionToggleManagerToolsMachineShowFileManager(this);
     m_pool[UIActionIndexMN_M_Group_S_Discard] = new UIActionSimpleManagerCommonPerformDiscard(this);
-    m_pool[UIActionIndexMN_M_Group_S_ShowLogDialog] = new UIActionSimpleManagerCommonShowMachineLogs(this);
-    m_pool[UIActionIndexMN_M_Group_S_ShowLogDialog] = new UIActionSimpleManagerCommonShowMachineLogs(this);
     m_pool[UIActionIndexMN_M_Group_S_Refresh] = new UIActionSimpleManagerCommonPerformRefresh(this);
     m_pool[UIActionIndexMN_M_Group_S_ShowInFileManager] = new UIActionSimpleManagerCommonShowInFileManager(this);
     m_pool[UIActionIndexMN_M_Group_S_CreateShortcut] = new UIActionSimpleManagerCommonPerformCreateShortcut(this);
@@ -3708,7 +3585,6 @@ void UIActionPoolManager::preparePool()
     m_pool[UIActionIndexMN_M_Machine_M_Tools_T_Activity] = new UIActionToggleManagerToolsMachineShowActivity(this);
     m_pool[UIActionIndexMN_M_Machine_M_Tools_T_FileManager] = new UIActionToggleManagerToolsMachineShowFileManager(this);
     m_pool[UIActionIndexMN_M_Machine_S_Discard] = new UIActionSimpleManagerCommonPerformDiscard(this);
-    m_pool[UIActionIndexMN_M_Machine_S_ShowLogDialog] = new UIActionSimpleManagerCommonShowMachineLogs(this);
     m_pool[UIActionIndexMN_M_Machine_S_Refresh] = new UIActionSimpleManagerCommonPerformRefresh(this);
     m_pool[UIActionIndexMN_M_Machine_S_ShowInFileManager] = new UIActionSimpleManagerCommonShowInFileManager(this);
     m_pool[UIActionIndexMN_M_Machine_S_CreateShortcut] = new UIActionSimpleManagerCommonPerformCreateShortcut(this);
@@ -3826,7 +3702,7 @@ void UIActionPoolManager::preparePool()
     m_menuUpdateHandlers[UIActionIndexMN_M_Cloud].ptfm =                 &UIActionPoolManager::updateMenuCloud;
     m_menuUpdateHandlers[UIActionIndexMN_M_CloudConsoleWindow].ptfm =    &UIActionPoolManager::updateMenuCloudConsoleWindow;
     m_menuUpdateHandlers[UIActionIndexMN_M_CloudConsole].ptfm =          &UIActionPoolManager::updateMenuCloudConsole;
-    m_menuUpdateHandlers[UIActionIndexMN_M_VMActivityOverview].ptfm =     &UIActionPoolManager::updateMenuVMActivityOverview;
+    m_menuUpdateHandlers[UIActionIndexMN_M_VMActivityOverview].ptfm =    &UIActionPoolManager::updateMenuVMActivityOverview;
     m_menuUpdateHandlers[UIActionIndexMN_M_Snapshot].ptfm =              &UIActionPoolManager::updateMenuSnapshot;
 
     /* Call to base-class: */
@@ -3836,8 +3712,12 @@ void UIActionPoolManager::preparePool()
 void UIActionPoolManager::prepareConnections()
 {
     /* Prepare connections: */
-    connect(gShortcutPool, &UIShortcutPool::sigManagerShortcutsReloaded, this, &UIActionPoolManager::sltApplyShortcuts);
-    connect(gShortcutPool, &UIShortcutPool::sigRuntimeShortcutsReloaded, this, &UIActionPoolManager::sltApplyShortcuts);
+    connect(gShortcutPool, &UIShortcutPool::sigManagerShortcutsReloaded,
+            this, &UIActionPoolManager::sltApplyShortcuts);
+    connect(gShortcutPool, &UIShortcutPool::sigRuntimeShortcutsReloaded,
+            this, &UIActionPoolManager::sltApplyShortcuts);
+    connect(gEDataManager, &UIExtraDataManager::sigSettingsExpertModeChange,
+            this, &UIActionPoolManager::sltHandleSettingsExpertModeChange);
 
     /* Call to base-class: */
     UIActionPool::prepareConnections();
@@ -3960,7 +3840,6 @@ void UIActionPoolManager::setShortcutsVisible(int iIndex, bool fVisible)
                     << action(UIActionIndexMN_M_Group_S_Reset)
                     // << action(UIActionIndexMN_M_Group_S_Detach)
                     << action(UIActionIndexMN_M_Group_S_Discard)
-                    << action(UIActionIndexMN_M_Group_S_ShowLogDialog)
                     << action(UIActionIndexMN_M_Group_S_Refresh)
                     << action(UIActionIndexMN_M_Group_S_ShowInFileManager)
                     << action(UIActionIndexMN_M_Group_S_CreateShortcut)
@@ -3996,7 +3875,6 @@ void UIActionPoolManager::setShortcutsVisible(int iIndex, bool fVisible)
                     << action(UIActionIndexMN_M_Machine_S_Reset)
                     // << action(UIActionIndexMN_M_Machine_S_Detach)
                     << action(UIActionIndexMN_M_Machine_S_Discard)
-                    << action(UIActionIndexMN_M_Machine_S_ShowLogDialog)
                     << action(UIActionIndexMN_M_Machine_S_Refresh)
                     << action(UIActionIndexMN_M_Machine_S_ShowInFileManager)
                     << action(UIActionIndexMN_M_Machine_S_CreateShortcut)
@@ -4043,7 +3921,16 @@ void UIActionPoolManager::updateShortcuts()
     UIActionPool::updateShortcuts();
     /* Create temporary Runtime UI pool to do the same: */
     if (!isTemporary())
-        UIActionPool::createTemporary(UIActionPoolType_Runtime);
+        UIActionPool::createTemporary(UIType_RuntimeUI);
+}
+
+void UIActionPoolManager::sltHandleSettingsExpertModeChange()
+{
+    /* Invalidate corresponding menus: */
+    m_invalidations << UIActionIndexMN_M_File_M_Tools
+                    << UIActionIndexMN_M_Group_M_Tools
+                    << UIActionIndexMN_M_Machine_M_Tools
+                    << UIActionIndexMN_M_Snapshot;
 }
 
 void UIActionPoolManager::updateMenuFile()
@@ -4133,9 +4020,13 @@ void UIActionPoolManager::updateMenuFileTools()
     pMenu->clear();
 
     /* Populate 'File' / 'Tools' menu: */
+    const bool fExpertMode = gEDataManager->isSettingsInExpertMode();
     pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_ExtensionPackManager));
-    pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_VirtualMediaManager));
-    pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_NetworkManager));
+    if (fExpertMode)
+    {
+        pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_VirtualMediaManager));
+        pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_NetworkManager));
+    }
     pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_CloudProfileManager));
     pMenu->addAction(action(UIActionIndexMN_M_File_M_Tools_T_VMActivityOverview));
 
@@ -4325,11 +4216,13 @@ void UIActionPoolManager::updateMenuGroupTools()
     pMenu->clear();
 
     /* Populate 'Group' / 'Tools' menu: */
+    const bool fExpertMode = gEDataManager->isSettingsInExpertMode();
     pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_Details));
     pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_Snapshots));
     pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_Logs));
     pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_Activity));
-    pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_FileManager));
+    if (fExpertMode)
+        pMenu->addAction(action(UIActionIndexMN_M_Group_M_Tools_T_FileManager));
 
     /* Mark menu as valid: */
     m_invalidations.remove(UIActionIndexMN_M_Group_M_Tools);
@@ -4344,11 +4237,13 @@ void UIActionPoolManager::updateMenuMachineTools()
     pMenu->clear();
 
     /* Populate 'Machine' / 'Tools' menu: */
+    const bool fExpertMode = gEDataManager->isSettingsInExpertMode();
     pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_Details));
     pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_Snapshots));
     pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_Logs));
     pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_Activity));
-    pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_FileManager));
+    if (fExpertMode)
+        pMenu->addAction(action(UIActionIndexMN_M_Machine_M_Tools_T_FileManager));
 
     /* Mark menu as valid: */
     m_invalidations.remove(UIActionIndexMN_M_Machine_M_Tools);
@@ -4634,11 +4529,13 @@ void UIActionPoolManager::updateMenuSnapshot()
     pMenu->clear();
 
     /* Populate Snapshot-menu: */
+    const bool fExpertMode = gEDataManager->isSettingsInExpertMode();
     pMenu->addAction(action(UIActionIndexMN_M_Snapshot_S_Take));
     pMenu->addAction(action(UIActionIndexMN_M_Snapshot_S_Delete));
     pMenu->addAction(action(UIActionIndexMN_M_Snapshot_S_Restore));
     pMenu->addAction(action(UIActionIndexMN_M_Snapshot_T_Properties));
-    pMenu->addAction(action(UIActionIndexMN_M_Snapshot_S_Clone));
+    if (fExpertMode)
+        pMenu->addAction(action(UIActionIndexMN_M_Snapshot_S_Clone));
 
     /* Mark menu as valid: */
     m_invalidations.remove(UIActionIndexMN_M_Snapshot);

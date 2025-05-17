@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -183,7 +183,7 @@ static SUPINSTFILE const    g_aSupInstallFiles[] =
  #ifdef RT_OS_WINDOWS
     {   kSupIFT_Dll,  kSupID_AppSharedLib,      false, "VBoxC" SUPLIB_DLL_SUFF },
  #else
-    {   kSupIFT_Exe,  kSupID_AppPrivArch,       false, "VBoxXPCOMIPCD" SUPLIB_EXE_SUFF },
+    {   kSupIFT_Dll,  kSupID_AppPrivArch,       false, "VBoxXPCOMIPCD" SUPLIB_DLL_SUFF },
     {   kSupIFT_Dll,  kSupID_AppSharedLib,      false, "VBoxXPCOM" SUPLIB_DLL_SUFF },
     {   kSupIFT_Dll,  kSupID_AppPrivArchComp,   false, "VBoxXPCOMIPCC" SUPLIB_DLL_SUFF },
     {   kSupIFT_Dll,  kSupID_AppPrivArchComp,   false, "VBoxC" SUPLIB_DLL_SUFF },
@@ -1033,7 +1033,7 @@ DECLHIDDEN(int) supR3HardenedVerifyAll(bool fFatal, const char *pszProgName, con
      */
     int rc2 = supR3HardenedVerifyProgram(pszProgName, pszExePath, fFatal, fLeaveOpen, fMainFlags);
     if (RT_FAILURE(rc2) && RT_SUCCESS(rc))
-        rc2 = rc;
+        rc = rc2;
 
     return rc;
 }
@@ -1874,7 +1874,9 @@ DECLHIDDEN(int) supR3HardenedVerifyFile(const char *pszFilename, RTHCUINTPTR hNa
     if (hVerify != INVALID_HANDLE_VALUE)
     {
 # ifdef VBOX_WITH_HARDENING
-        uint32_t fFlags = SUPHNTVI_F_REQUIRE_KERNEL_CODE_SIGNING;
+        /** @todo do we need to validate the fMaybe3rdParty claim here? I.e. only
+         *        apply it if 'ExtensionPacks' is part of the path. */
+        uint32_t fFlags = SUPHNTVI_F_REQUIRE_CODE_SIGNING;
         if (!fMaybe3rdParty)
             fFlags = SUPHNTVI_F_REQUIRE_BUILD_CERT;
         const char *pszSuffix = RTPathSuffix(pszFilename);

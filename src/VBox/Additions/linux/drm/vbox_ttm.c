@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2013-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2013-2024 Oracle and/or its affiliates.
  * This file is based on ast_ttm.c
  * Copyright 2012 Red Hat Inc.
  *
@@ -363,7 +363,7 @@ static int vbox_bo_move(struct ttm_buffer_object *bo, bool evict,
 	struct ttm_operation_ctx *ctx, struct ttm_resource *new_mem,
 	struct ttm_place *hop)
 {
-# if RTLNX_VER_MIN(6,4,0)
+# if RTLNX_VER_MIN(6,4,0) || RTLNX_RHEL_RANGE(9,7, 9,99)
 	if (!bo->resource)
 	{
 		if (new_mem->mem_type != TTM_PL_SYSTEM)
@@ -532,7 +532,7 @@ void vbox_ttm_placement(struct vbox_bo *bo, u32 mem_type)
 #endif
 
 	bo->placement.placement = bo->placements;
-#if RTLNX_VER_MAX(6,9,0)
+#if RTLNX_VER_MAX(6,9,0) && !RTLNX_RHEL_MAJ_PREREQ(9,5)
 	bo->placement.busy_placement = bo->placements;
 #endif
 
@@ -587,7 +587,7 @@ void vbox_ttm_placement(struct vbox_bo *bo, u32 mem_type)
 	}
 
 	bo->placement.num_placement = c;
-#if RTLNX_VER_MAX(6,9,0)
+#if RTLNX_VER_MAX(6,9,0) && !RTLNX_RHEL_MAJ_PREREQ(9,5)
 	bo->placement.num_busy_placement = c;
 #endif
 
@@ -641,7 +641,7 @@ int vbox_bo_create(struct drm_device *dev, int size, int align,
 	vboxbo->bo.bdev->dev_mapping = dev->dev_mapping;
 #endif
 
-	vbox_ttm_placement(vboxbo, VBOX_MEM_TYPE_VRAM | VBOX_MEM_TYPE_SYSTEM);
+	vbox_ttm_placement(vboxbo, VBOX_MEM_TYPE_SYSTEM);
 
 #if RTLNX_VER_MAX(5,13,0) && !RTLNX_RHEL_RANGE(8,6, 8,99)
 	acc_size = ttm_bo_dma_acc_size(&vbox->ttm.bdev, size,
