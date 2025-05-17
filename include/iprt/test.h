@@ -3,7 +3,7 @@
  */
 
 /*
- * Copyright (C) 2009-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2009-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -420,10 +420,58 @@ RTR3DECL(int) RTTestSubV(RTTEST hTest, const char *pszSubTestFmt, va_list va) RT
 RTR3DECL(int) RTTestSubDone(RTTEST hTest);
 
 /**
+ * Starts a sub-sub-test.
+ *
+ * This will perform an implicit RTTestSubSubDone() call if that has not been
+ * done since the last RTTestSubSub() call.
+ *
+ * @returns Number of chars printed.
+ * @param   hTest           The test handle. If NIL_RTTEST we'll use the one
+ *                          associated with the calling thread.
+ * @param   pszSubSubTest   The sub-sub-test name.
+ */
+RTR3DECL(int) RTTestSubSub(RTTEST hTest, const char *pszSubSubTest);
+
+/**
+ * Format string version of RTTestSubSub().
+ *
+ * See RTTestSubSub() for details.
+ *
+ * @returns Number of chars printed.
+ * @param   hTest               The test handle. If NIL_RTTEST we'll use the one
+ *                              associated with the calling thread.
+ * @param   pszSubSubTestFmt    The sub-sub-test name format string.
+ * @param   ...                 Arguments.
+ */
+RTR3DECL(int) RTTestSubSubF(RTTEST hTest, const char *pszSubSubTestFmt, ...) RT_IPRT_FORMAT_ATTR(2, 3);
+
+/**
+ * Format string version of RTTestSubSub().
+ *
+ * See RTTestSubSub() for details.
+ *
+ * @returns Number of chars printed.
+ * @param   hTest               The test handle. If NIL_RTTEST we'll use the one
+ *                              associated with the calling thread.
+ * @param   pszSubSubTestFmt    The sub-sub-test name format string.
+ * @param   va                  Arguments.
+ */
+RTR3DECL(int) RTTestSubSubV(RTTEST hTest, const char *pszSubSubTestFmt, va_list va) RT_IPRT_FORMAT_ATTR(2, 0);
+
+/**
+ * Completes a sub-sub-test.
+ *
+ * @returns Number of chars printed, negative numbers are IPRT error codes.
+ * @param   hTest       The test handle. If NIL_RTTEST we'll use the one
+ *                      associated with the calling thread.
+ */
+RTR3DECL(int) RTTestSubSubDone(RTTEST hTest);
+
+/**
  * Prints an extended PASSED message, optional.
  *
- * This does not conclude the sub-test, it could be used to report the passing
- * of a sub-sub-to-the-power-of-N-test.
+ * This does not conclude the (sub-)sub-test, it could be used to report the
+ * passing of a sub-sub-to-the-power-of-N-test.
  *
  * @returns Number of chars printed, negative numbers are IPRT error codes.
  * @param   hTest       The test handle. If NIL_RTTEST we'll use the one
@@ -436,8 +484,8 @@ RTR3DECL(int) RTTestPassedV(RTTEST hTest, const char *pszFormat, va_list va) RT_
 /**
  * Prints an extended PASSED message, optional.
  *
- * This does not conclude the sub-test, it could be used to report the passing
- * of a sub-sub-to-the-power-of-N-test.
+ * This does not conclude the (sub-)sub-test, it could be used to report the
+ * passing of a sub-sub-to-the-power-of-N-test.
  *
  * @returns Number of chars printed, negative numbers are IPRT error codes.
  * @param   hTest       The test handle. If NIL_RTTEST we'll use the one
@@ -555,7 +603,8 @@ AssertCompile(RTTESTUNIT_PS_PER_PAGE == 0x2d);
  *
  * This is typically used for benchmarking but can be used for other purposes
  * like reporting limits of some implementation.  The value gets associated with
- * the current sub test, the name must be unique within the sub test.
+ * the current (sub-)sub-test, the name must be unique within the
+ * (sub-)sub-test.
  *
  * @returns IPRT status code.
  *
@@ -616,13 +665,22 @@ RTR3DECL(int) RTTestErrorInc(RTTEST hTest);
 RTR3DECL(uint32_t) RTTestErrorCount(RTTEST hTest);
 
 /**
- * Get the error count of the current sub test.
+ * Get the error count of the current sub-test.
  *
  * @returns The error counter, UINT32_MAX if no valid test handle.
  * @param   hTest       The test handle. If NIL_RTTEST we'll use the one
  *                      associated with the calling thread.
  */
 RTR3DECL(uint32_t) RTTestSubErrorCount(RTTEST hTest);
+
+/**
+ * Get the error count of the current sub-sub-test.
+ *
+ * @returns The error counter, UINT32_MAX if no valid test handle.
+ * @param   hTest       The test handle. If NIL_RTTEST we'll use the one
+ *                      associated with the calling thread.
+ */
+RTR3DECL(uint32_t) RTTestSubSubErrorCount(RTTEST hTest);
 
 /**
  * Increments the error counter and prints a failure message.
@@ -923,6 +981,25 @@ RTR3DECL(int) RTTestRestoreAssertions(RTTEST hTest);
             RTTestFailed((hTest), "line %u: %s: %Rrc", __LINE__, #rcExpr, rcCheck); \
         } \
     } while (0)
+/** @def RTTEST_CHECK_RC_OK_BREAK
+ * Check whether a IPRT style status code indicates success.
+ *
+ * If the status indicates failure, call RTTestFailed giving the line number,
+ * expression and status code, then break.
+ *
+ * @param   hTest           The test handle.
+ * @param   rcExpr          The expression resulting in an IPRT status code.
+ *                          This will be assigned to a local rcCheck variable
+ *                          that can be used as return value.
+ */
+#define RTTEST_CHECK_RC_OK_BREAK(hTest, rcExpr) \
+    do { \
+        int rcCheck = (rcExpr); \
+        if (RT_FAILURE(rcCheck)) { \
+            RTTestFailed((hTest), "line %u: %s: %Rrc", __LINE__, #rcExpr, rcCheck); \
+            break; \
+        } \
+    } while (0)
 /** @def RTTEST_CHECK_RC_OK_RET
  * Check whether a IPRT style status code indicates success.
  *
@@ -1023,17 +1100,57 @@ RTR3DECL(int) RTTestISubF(const char *pszSubTestFmt, ...) RT_IPRT_FORMAT_ATTR(1,
 RTR3DECL(int) RTTestISubV(const char *pszSubTestFmt, va_list va) RT_IPRT_FORMAT_ATTR(1, 0);
 
 /**
- * Completes a sub-test.
+ * Completes a sub-test (and any outstanding sub-sub-test).
  *
  * @returns Number of chars printed.
  */
 RTR3DECL(int) RTTestISubDone(void);
 
 /**
+ * Starts a sub-sub-test.
+ *
+ * This will perform an implicit RTTestSubSubDone() call if that has not been
+ * done since the last RTTestSubSub call.
+ *
+ * @returns Number of chars printed.
+ * @param   pszSubSubTest   The sub-sub-test name.
+ */
+RTR3DECL(int) RTTestISubSub(const char *pszSubSubTest);
+
+/**
+ * Format string version of RTTestSubSub.
+ *
+ * See RTTestSubSub for details.
+ *
+ * @returns Number of chars printed.
+ * @param   pszSubSubTestFmt    The sub-sub-test name format string.
+ * @param   ...                 Arguments.
+ */
+RTR3DECL(int) RTTestISubSubF(const char *pszSubSubTestFmt, ...) RT_IPRT_FORMAT_ATTR(1, 2);
+
+/**
+ * Format string version of RTTestSubSub.
+ *
+ * See RTTestSubSub for details.
+ *
+ * @returns Number of chars printed.
+ * @param   pszSubSubTestFmt    The sub-sub-test name format string.
+ * @param   va                  Arguments.
+ */
+RTR3DECL(int) RTTestISubSubV(const char *pszSubSubTestFmt, va_list va) RT_IPRT_FORMAT_ATTR(1, 0);
+
+/**
+ * Completes a sub-sub-test.
+ *
+ * @returns Number of chars printed.
+ */
+RTR3DECL(int) RTTestISubSubDone(void);
+
+/**
  * Prints an extended PASSED message, optional.
  *
- * This does not conclude the sub-test, it could be used to report the passing
- * of a sub-sub-to-the-power-of-N-test.
+ * This does not conclude the (sub-)sub-test, it could be used to report the
+ * passing of a sub-sub-to-the-power-of-N-test.
  *
  * @returns IPRT status code.
  * @param   pszFormat   The message. No trailing newline.
@@ -1044,8 +1161,8 @@ RTR3DECL(int) RTTestIPassedV(const char *pszFormat, va_list va) RT_IPRT_FORMAT_A
 /**
  * Prints an extended PASSED message, optional.
  *
- * This does not conclude the sub-test, it could be used to report the passing
- * of a sub-sub-to-the-power-of-N-test.
+ * This does not conclude the (sub-)sub-test, it could be used to report the
+ * passing of a sub-sub-to-the-power-of-N-test.
  *
  * @returns IPRT status code.
  * @param   pszFormat   The message. No trailing newline.
@@ -1058,7 +1175,8 @@ RTR3DECL(int) RTTestIPassed(const char *pszFormat, ...) RT_IPRT_FORMAT_ATTR(1, 2
  *
  * This is typically used for benchmarking but can be used for other purposes
  * like reporting limits of some implementation.  The value gets associated with
- * the current sub test, the name must be unique within the sub test.
+ * the current (sub-)sub-test, the name must be unique within the
+ * (sub-)sub-test.
  *
  * @returns IPRT status code.
  *

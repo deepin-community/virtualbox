@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2019-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2019-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -34,26 +34,25 @@
 
 /* GUI includes: */
 #include "QIAdvancedSlider.h"
-#include "UICommon.h"
+#include "UIGlobalSession.h"
+#include "UIGuestOSType.h"
 #include "UIVideoMemoryEditor.h"
 
 /* COM includes: */
+#include "CPlatformProperties.h"
 #include "CSystemProperties.h"
 
 
 UIVideoMemoryEditor::UIVideoMemoryEditor(QWidget *pParent /* = 0 */)
-    : QIWithRetranslateUI<QWidget>(pParent)
+    : UIEditor(pParent, true /* show in basic mode? */)
     , m_iValue(0)
-    , m_comGuestOSType(CGuestOSType())
     , m_cGuestScreenCount(1)
     , m_enmGraphicsControllerType(KGraphicsControllerType_Null)
 #ifdef VBOX_WITH_3D_ACCELERATION
     , m_f3DAccelerationSupported(false)
     , m_f3DAccelerationEnabled(false)
 #endif
-    , m_iMinVRAM(0)
     , m_iMaxVRAM(0)
-    , m_iMaxVRAMVisible(0)
     , m_pLayout(0)
     , m_pLabelMemory(0)
     , m_pSlider(0)
@@ -70,7 +69,7 @@ void UIVideoMemoryEditor::setValue(int iValue)
      * slider if value has changed: */
     if (m_iValue != iValue)
     {
-        m_iValue = RT_MIN(iValue, m_iMaxVRAM);
+        m_iValue = qMin(iValue, m_iMaxVRAM);
         if (m_pSlider)
             m_pSlider->setValue(m_iValue);
 
@@ -84,14 +83,14 @@ int UIVideoMemoryEditor::value() const
     return m_pSlider ? m_pSlider->value() : m_iValue;
 }
 
-void UIVideoMemoryEditor::setGuestOSType(const CGuestOSType &comGuestOSType)
+void UIVideoMemoryEditor::setGuestOSTypeId(const QString &strGuestOSTypeId)
 {
     /* Update cached value and
      * requirements if value has changed: */
-    if (m_comGuestOSType != comGuestOSType)
+    if (m_strGuestOSTypeId != strGuestOSTypeId)
     {
         /* Remember new guest OS type: */
-        m_comGuestOSType = comGuestOSType;
+        m_strGuestOSTypeId = strGuestOSTypeId;
 
         /* Update requirements: */
         updateRequirements();
@@ -167,7 +166,7 @@ void UIVideoMemoryEditor::setMinimumLayoutIndent(int iIndent)
         m_pLayout->setColumnMinimumWidth(0, iIndent);
 }
 
-void UIVideoMemoryEditor::retranslateUi()
+void UIVideoMemoryEditor::sltRetranslateUI()
 {
     if (m_pLabelMemory)
         m_pLabelMemory->setText(tr("Video &Memory:"));
@@ -183,12 +182,12 @@ void UIVideoMemoryEditor::retranslateUi()
 
     if (m_pLabelMemoryMin)
     {
-        m_pLabelMemoryMin->setText(tr("%1 MB").arg(m_iMinVRAM));
+        m_pLabelMemoryMin->setText(tr("%1 MB").arg(0));
         m_pLabelMemoryMin->setToolTip(tr("Minimum possible video memory size."));
     }
     if (m_pLabelMemoryMax)
     {
-        m_pLabelMemoryMax->setText(tr("%1 MB").arg(m_iMaxVRAMVisible));
+        m_pLabelMemoryMax->setText(tr("%1 MB").arg(m_iMaxVRAM));
         m_pLabelMemoryMax->setToolTip(tr("Maximum possible video memory size."));
     }
 }
@@ -224,10 +223,8 @@ void UIVideoMemoryEditor::sltHandleSpinBoxChange()
 void UIVideoMemoryEditor::prepare()
 {
     /* Prepare common variables: */
-    const CSystemProperties comProperties = uiCommon().virtualBox().GetSystemProperties();
-    m_iMinVRAM = comProperties.GetMinGuestVRAM();
+    const CSystemProperties comProperties = gpGlobalSession->virtualBox().GetSystemProperties();
     m_iMaxVRAM = comProperties.GetMaxGuestVRAM();
-    m_iMaxVRAMVisible = m_iMaxVRAM;
 
     /* Create main layout: */
     m_pLayout = new QGridLayout(this);
@@ -253,9 +250,9 @@ void UIVideoMemoryEditor::prepare()
             m_pSlider = new QIAdvancedSlider(this);
             if (m_pSlider)
             {
-                m_pSlider->setMinimum(m_iMinVRAM);
-                m_pSlider->setMaximum(m_iMaxVRAMVisible);
-                m_pSlider->setPageStep(calculatePageStep(m_iMaxVRAMVisible));
+                m_pSlider->setMinimum(0);
+                m_pSlider->setMaximum(m_iMaxVRAM);
+                m_pSlider->setPageStep(calculatePageStep(m_iMaxVRAM));
                 m_pSlider->setSingleStep(m_pSlider->pageStep() / 4);
                 m_pSlider->setTickInterval(m_pSlider->pageStep());
                 m_pSlider->setSnappingEnabled(true);
@@ -300,65 +297,79 @@ void UIVideoMemoryEditor::prepare()
             setFocusProxy(m_pSpinBox);
             if (m_pLabelMemory)
                 m_pLabelMemory->setBuddy(m_pSpinBox);
-            m_pSpinBox->setMinimum(m_iMinVRAM);
-            m_pSpinBox->setMaximum(m_iMaxVRAMVisible);
-            connect(m_pSpinBox, static_cast<void(QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+            m_pSpinBox->setMinimum(0);
+            m_pSpinBox->setMaximum(m_iMaxVRAM);
+            connect(m_pSpinBox, &QSpinBox::valueChanged,
                     this, &UIVideoMemoryEditor::sltHandleSpinBoxChange);
             m_pLayout->addWidget(m_pSpinBox, 0, 2);
         }
     }
 
     /* Apply language settings: */
-    retranslateUi();
+    sltRetranslateUI();
 }
 
 void UIVideoMemoryEditor::updateRequirements()
 {
     /* Make sure guest OS type is set: */
-    if (m_comGuestOSType.isNull())
+    if (m_strGuestOSTypeId.isEmpty())
         return;
 
-    /* Init visible maximum VRAM: */
-    m_iMaxVRAMVisible = m_cGuestScreenCount * 32;
+    /* Acquire minimum and maximum visible VRAM size on the basis of platform data: */
+    const KPlatformArchitecture enmArch = optionalFlags().contains("arch")
+                                        ? optionalFlags().value("arch").value<KPlatformArchitecture>()
+                                        : KPlatformArchitecture_x86;
+    CPlatformProperties comPlatformProperties = gpGlobalSession->virtualBox().GetPlatformProperties(enmArch);
+    bool f3DAccelerationEnabled = false;
+#ifdef VBOX_WITH_3D_ACCELERATION
+    f3DAccelerationEnabled = m_f3DAccelerationEnabled;
+#endif
+    ULONG uMinVRAM = 0, uMaxVRAM = 0;
+    comPlatformProperties.GetSupportedVRAMRange(m_enmGraphicsControllerType, f3DAccelerationEnabled, uMinVRAM, uMaxVRAM);
 
-    /* Get monitors count and recommended VRAM: */
-    int iNeedMBytes = UICommon::requiredVideoMemory(m_comGuestOSType.GetId(), m_cGuestScreenCount) / _1M;
+    /* Init recommended VRAM according to guest OS type and screen count: */
+    int iNeedMBytes = UIGuestOSTypeHelpers::requiredVideoMemory(m_strGuestOSTypeId, m_cGuestScreenCount) / _1M;
+
+    /* Init visible maximum VRAM to be no less than 32MB per screen: */
+    int iMaxVRAMVisible = m_cGuestScreenCount * 32;
     /* Adjust visible maximum VRAM to be no less than 128MB (if possible): */
-    if (m_iMaxVRAMVisible < 128 && m_iMaxVRAM >= 128)
-        m_iMaxVRAMVisible = 128;
+    if (iMaxVRAMVisible < 128 && uMaxVRAM >= 128)
+        iMaxVRAMVisible = 128;
 
 #ifdef VBOX_WITH_3D_ACCELERATION
     if (m_f3DAccelerationEnabled && m_f3DAccelerationSupported)
     {
         /* Adjust recommended VRAM to be no less than 128MB: */
         iNeedMBytes = qMax(iNeedMBytes, 128);
+
         /* Adjust visible maximum VRAM to be no less than 256MB (if possible): */
-        if (m_iMaxVRAMVisible < 256 && m_iMaxVRAM >= 256)
-            m_iMaxVRAMVisible = 256;
+        if (iMaxVRAMVisible < 256 && uMaxVRAM >= 256)
+            iMaxVRAMVisible = 256;
     }
 #endif /* VBOX_WITH_3D_ACCELERATION */
 
-    /* Adjust visible maximum VRAM to be no less than initial VRAM: */
-    m_iMaxVRAMVisible = qMax(m_iMaxVRAMVisible, m_iValue);
-    /* Adjust visible maximum VRAM to be no less than recommended VRAM: */
-    m_iMaxVRAMVisible = qMax(m_iMaxVRAMVisible, iNeedMBytes);
-
     /* Adjust recommended VRAM to be no more than actual maximum VRAM: */
-    iNeedMBytes = qMin(iNeedMBytes, m_iMaxVRAM);
+    iNeedMBytes = qMin(iNeedMBytes, (int)uMaxVRAM);
+
+    /* Adjust visible maximum VRAM to be no less than initial VRAM: */
+    iMaxVRAMVisible = qMax(iMaxVRAMVisible, m_iValue);
+    /* Adjust visible maximum VRAM to be no less than recommended VRAM: */
+    iMaxVRAMVisible = qMax(iMaxVRAMVisible, iNeedMBytes);
     /* Adjust visible maximum VRAM to be no more than actual maximum VRAM: */
-    m_iMaxVRAMVisible = qMin(m_iMaxVRAMVisible, m_iMaxVRAM);
+    iMaxVRAMVisible = qMin(iMaxVRAMVisible, (int)uMaxVRAM);
 
     if (m_pSpinBox)
-        m_pSpinBox->setMaximum(m_iMaxVRAMVisible);
+        m_pSpinBox->setMaximum(iMaxVRAMVisible);
     if (m_pSlider)
     {
-        m_pSlider->setMaximum(m_iMaxVRAMVisible);
-        m_pSlider->setPageStep(calculatePageStep(m_iMaxVRAMVisible));
-        m_pSlider->setWarningHint(1, qMin(iNeedMBytes, m_iMaxVRAMVisible));
-        m_pSlider->setOptimalHint(qMin(iNeedMBytes, m_iMaxVRAMVisible), m_iMaxVRAMVisible);
+        m_pSlider->setMaximum(iMaxVRAMVisible);
+        m_pSlider->setPageStep(calculatePageStep(iMaxVRAMVisible));
+        m_pSlider->setErrorHint(0, uMinVRAM);
+        m_pSlider->setWarningHint(uMinVRAM, iNeedMBytes);
+        m_pSlider->setOptimalHint(iNeedMBytes, iMaxVRAMVisible);
     }
     if (m_pLabelMemoryMax)
-        m_pLabelMemoryMax->setText(tr("%1 MB").arg(m_iMaxVRAMVisible));
+        m_pLabelMemoryMax->setText(tr("%1 MB").arg(iMaxVRAMVisible));
 }
 
 void UIVideoMemoryEditor::revalidate()

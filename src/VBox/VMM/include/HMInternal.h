@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -371,6 +371,8 @@ typedef struct HM
              * logging). */
             bool                        fAlwaysInterceptMovDRx;
 
+            /** Host CR0 value (set by ring-0 VMX init, for logging). */
+            uint64_t                    u64HostCr0;
             /** Host CR4 value (set by ring-0 VMX init, for logging). */
             uint64_t                    u64HostCr4;
             /** Host SMM monitor control (set by ring-0 VMX init, for logging). */
@@ -379,6 +381,11 @@ typedef struct HM
             uint64_t                    u64HostMsrEfer;
             /** Host IA32_FEATURE_CONTROL MSR (set by ring-0 VMX init, for logging). */
             uint64_t                    u64HostFeatCtrl;
+            /** Host IA32_CORE_CAPABILITIES MSR (set by ring-0 VMX init, for logging). */
+            uint64_t                    u64HostCoreCap;
+            /** Host MSR_MEMORY_CTRL MSR (set by ring-0 VMX init, for logging). */
+            uint64_t                    u64HostMemoryCtrl;
+
             /** Host zero'ed DR6 value (set by ring-0 VMX init, for logging). */
             uint64_t                    u64HostDr6Zeroed;
 
@@ -584,7 +591,7 @@ typedef HMR0PERVM *PHMR0PERVM;
 
 /** @addtogroup grp_hm_int_svm  SVM Internal
  * @{ */
-/** SVM VMRun function, see SVMR0VMRun(). */
+/** SVM VMRun function, see SVMR0VMRun().  */
 typedef DECLCALLBACKTYPE(int, FNHMSVMVMRUN,(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhysVMCB));
 /** Pointer to a SVM VMRun function. */
 typedef R0PTRTYPE(FNHMSVMVMRUN *) PFNHMSVMVMRUN;
@@ -935,6 +942,7 @@ typedef struct HMCPU
     STAMCOUNTER             StatExitReasonNpf;
 
     STAMCOUNTER             StatNestedExitReasonNpf;
+    STAMCOUNTER             StatNestedExitACSplitLock;
 
     STAMCOUNTER             StatFlushPage;
     STAMCOUNTER             StatFlushPageManual;
@@ -990,6 +998,10 @@ typedef struct HMCPU
     STAMCOUNTER             StatVmxCheckBadSel;
     STAMCOUNTER             StatVmxCheckBadRpl;
     STAMCOUNTER             StatVmxCheckPmOk;
+    STAMCOUNTER             StatVmxCheck1;
+    STAMCOUNTER             StatVmxCheck2;
+    STAMCOUNTER             StatVmxCheckDisabled;
+    STAMCOUNTER             StatVmxCheckOk;
 
     STAMCOUNTER             StatVmxPreemptionRecalcingDeadline;
     STAMCOUNTER             StatVmxPreemptionRecalcingDeadlineExpired;
@@ -1144,7 +1156,7 @@ typedef struct HMR0PERVCPU
 
         /** For saving stack space, the disassembler state is allocated here
          * instead of on the stack. */
-        DISCPUSTATE                 DisState;
+        DISSTATE                    Dis;
     } svm;
 } HMR0PERVCPU;
 /** Pointer to HM ring-0 VMCPU instance data. */
@@ -1166,6 +1178,11 @@ AssertCompileMemberAlignment(HMR0PERVCPU, vmx.RestoreHost,   8);
 #define HM_WSF_L1D_ENTRY            RT_BIT_32(2)
 /** Flush MDS buffers on VM entry. */
 #define HM_WSF_MDS_ENTRY            RT_BIT_32(3)
+/** MSR_IA32_SPEC_CTRL needs to be replaced upon entry and exit.
+ * Save host value on entry, load guest value, run guest, save guest value on
+ * exit and restore the host value.
+ * @todo may not reliable for VT-x/Intel.  */
+#define HM_WSF_SPEC_CTRL            RT_BIT_32(4)
 
 /** Touch IA32_FLUSH_CMD.L1D on VM scheduling. */
 #define HM_WSF_L1D_SCHED            RT_BIT_32(16)
@@ -1181,9 +1198,12 @@ extern uint32_t         g_uHmMaxAsid;
 extern bool             g_fHmVmxUsePreemptTimer;
 extern uint8_t          g_cHmVmxPreemptTimerShift;
 extern bool             g_fHmVmxSupportsVmcsEfer;
+extern uint64_t         g_uHmVmxHostCr0;
 extern uint64_t         g_uHmVmxHostCr4;
 extern uint64_t         g_uHmVmxHostMsrEfer;
 extern uint64_t         g_uHmVmxHostSmmMonitorCtl;
+extern uint64_t         g_uHmVmxHostCoreCap;
+extern uint64_t         g_uHmVmxHostMemoryCtrl;
 extern bool             g_fHmSvmSupported;
 extern uint32_t         g_uHmSvmRev;
 extern uint32_t         g_fHmSvmFeatures;
@@ -1228,14 +1248,22 @@ VMM_INT_DECL(int)           hmEmulateSvmMovTpr(PVMCC pVM, PVMCPUCC pVCpu);
  *
  * @{
  */
-DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_SansIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_SansIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_SansIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_SansIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_WithIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_WithIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_WithIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
-DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_WithIbpbExit(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_SansIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_SansIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_SansIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_SansIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_WithIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_WithIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_WithIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_WithIbpbExit_SansSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_SansIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_SansIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_SansIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_SansIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_SansIbpbEntry_WithIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_SansIbpbEntry_WithIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_SansXcr0_WithIbpbEntry_WithIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
+DECLASM(int) hmR0SvmVmRun_WithXcr0_WithIbpbEntry_WithIbpbExit_WithSpecCtrl(PVMCC pVM, PVMCPUCC pVCpu, RTHCPHYS HCPhyspVMCB);
 /** @} */
 
 /** @} */

@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2023 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2024 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -611,17 +611,13 @@ DECLINLINE(PDMHOSTAUDIOSTREAMSTATE) drvAudioStreamGetBackendState(PDRVAUDIO pThi
 {
     if (pThis->pHostDrvAudio)
     {
-        /* Don't call if the backend wasn't created for this stream (disabled). */
-        if (pStreamEx->fStatus & PDMAUDIOSTREAM_STS_BACKEND_CREATED)
-        {
-            AssertPtrReturn(pThis->pHostDrvAudio->pfnStreamGetState, PDMHOSTAUDIOSTREAMSTATE_NOT_WORKING);
-            PDMHOSTAUDIOSTREAMSTATE enmState = pThis->pHostDrvAudio->pfnStreamGetState(pThis->pHostDrvAudio, pStreamEx->pBackend);
-            Log9Func(("%s: %s\n", pStreamEx->Core.Cfg.szName, PDMHostAudioStreamStateGetName(enmState) ));
-            Assert(   enmState > PDMHOSTAUDIOSTREAMSTATE_INVALID
-                   && enmState < PDMHOSTAUDIOSTREAMSTATE_END
-                   && (enmState != PDMHOSTAUDIOSTREAMSTATE_DRAINING || pStreamEx->Core.Cfg.enmDir == PDMAUDIODIR_OUT));
-            return enmState;
-        }
+        AssertPtrReturn(pThis->pHostDrvAudio->pfnStreamGetState, PDMHOSTAUDIOSTREAMSTATE_NOT_WORKING);
+        PDMHOSTAUDIOSTREAMSTATE enmState = pThis->pHostDrvAudio->pfnStreamGetState(pThis->pHostDrvAudio, pStreamEx->pBackend);
+        Log9Func(("%s: %s\n", pStreamEx->Core.Cfg.szName, PDMHostAudioStreamStateGetName(enmState) ));
+        Assert(   enmState > PDMHOSTAUDIOSTREAMSTATE_INVALID
+               && enmState < PDMHOSTAUDIOSTREAMSTATE_END
+               && (enmState != PDMHOSTAUDIOSTREAMSTATE_DRAINING || pStreamEx->Core.Cfg.enmDir == PDMAUDIODIR_OUT));
+        return enmState;
     }
     Log9Func(("%s: not-working\n", pStreamEx->Core.Cfg.szName));
     return PDMHOSTAUDIOSTREAMSTATE_NOT_WORKING;
@@ -1493,7 +1489,7 @@ static DECLCALLBACK(void) drvAudioStreamInitAsync(PDRVAUDIO pThis, PDRVAUDIOSTRE
     /*
      * Release our stream reference.
      */
-    uint32_t cRefs = drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
+    uint32_t const cRefs = drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
     LogFlowFunc(("returns (fDestroyed=%d, cRefs=%u)\n", fDestroyed, cRefs)); RT_NOREF(cRefs);
 }
 
@@ -1626,7 +1622,7 @@ static int drvAudioStreamCreateInternalBackend(PDRVAUDIO pThis, PDRVAUDIOSTREAM 
                      PDMAudioPropsFramesToMilli(&pCfgAcq->Props, pCfgAcq->Backend.cFramesPreBuffering), pCfgAcq->Backend.cFramesPreBuffering));
         }
     }
-    else if (CfgReq.Backend.cFramesPreBuffering == 0) /* Was the pre-buffering requested as being disabeld? Tell the users. */
+    else /* Was the pre-buffering requested as being disabeld? Tell the users. */
     {
         LogRel2(("Audio: Pre-buffering is disabled for stream '%s'\n", pCfgAcq->szName));
         pCfgAcq->Backend.cFramesPreBuffering = 0;
@@ -2123,7 +2119,8 @@ static int drvAudioStreamUninitInternal(PDRVAUDIO pThis, PDRVAUDIOSTREAM pStream
  * @param   pThis           Pointer to the DrvAudio instance data.
  * @param   pStreamEx       The stream to reference.
  * @param   fMayDestroy     Whether the caller is allowed to implicitly destroy
- *                          the stream or not.
+ *                          the stream or not.  The reference count must _not_
+ *                          reach zero if this is false!
  */
 static uint32_t drvAudioStreamReleaseInternal(PDRVAUDIO pThis, PDRVAUDIOSTREAM pStreamEx, bool fMayDestroy)
 {
@@ -2159,6 +2156,7 @@ static uint32_t drvAudioStreamReleaseInternal(PDRVAUDIO pThis, PDRVAUDIOSTREAM p
             RTCritSectRwLeaveExcl(&pThis->CritSectGlobals);
 
             drvAudioStreamFree(pStreamEx);
+            pStreamEx = NULL;
         }
         else
         {
@@ -2172,7 +2170,7 @@ static uint32_t drvAudioStreamReleaseInternal(PDRVAUDIO pThis, PDRVAUDIOSTREAM p
         AssertFailed();
     }
 
-    Log12Func(("returns %u (%s)\n", cRefs, cRefs > 0 ? pStreamEx->Core.Cfg.szName : "destroyed"));
+    Log12Func(("returns %u (%s)\n", cRefs, cRefs > 0 ? pStreamEx->Core.Cfg.szName : "destroyed")); /* Not 101% safe, but it's logging. */
     return cRefs;
 }
 
@@ -2265,7 +2263,8 @@ static DECLCALLBACK(int) drvAudioStreamDestroy(PPDMIAUDIOCONNECTOR pInterface, P
                 {
                     LogFlowFunc(("Successfully cancelled pending pfnStreamInitAsync call (hReqInitAsync=%p).\n",
                                  pStreamEx->hReqInitAsync));
-                    drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
+                    uint32_t const cRefs = drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
+                    AssertStmt(cRefs > 0, pStreamEx = NULL);
                 }
                 else
                 {
@@ -2277,24 +2276,27 @@ static DECLCALLBACK(int) drvAudioStreamDestroy(PPDMIAUDIOCONNECTOR pInterface, P
             else
                 RTCritSectLeave(&pStreamEx->Core.CritSect);
 
-            /*
-             * Now, if the backend requests asynchronous disabling and destruction
-             * push the disabling and destroying over to a worker thread.
-             *
-             * This is a general offloading feature that all backends should make use of,
-             * however it's rather precarious on macs where stopping an already draining
-             * stream may take 8-10ms which naturally isn't something we should be doing
-             * on an EMT.
-             */
-            if (!(pThis->BackendCfg.fFlags & PDMAUDIOBACKEND_F_ASYNC_STREAM_DESTROY))
-                drvAudioStreamDestroyAsync(pThis, pStreamEx, fImmediate);
-            else
+            if (RT_LIKELY(pStreamEx != NULL)) /* paranoia^2 */
             {
-                int rc2 = RTReqPoolCallEx(pThis->hReqPool, 0 /*cMillies*/, NULL /*phReq*/,
-                                          RTREQFLAGS_VOID | RTREQFLAGS_NO_WAIT,
-                                          (PFNRT)drvAudioStreamDestroyAsync, 3, pThis, pStreamEx, fImmediate);
-                LogFlowFunc(("hReqInitAsync=%p rc2=%Rrc\n", pStreamEx->hReqInitAsync, rc2));
-                AssertRCStmt(rc2, drvAudioStreamDestroyAsync(pThis, pStreamEx, fImmediate));
+                /*
+                 * Now, if the backend requests asynchronous disabling and destruction
+                 * push the disabling and destroying over to a worker thread.
+                 *
+                 * This is a general offloading feature that all backends should make use of,
+                 * however it's rather precarious on macs where stopping an already draining
+                 * stream may take 8-10ms which naturally isn't something we should be doing
+                 * on an EMT.
+                 */
+                if (!(pThis->BackendCfg.fFlags & PDMAUDIOBACKEND_F_ASYNC_STREAM_DESTROY))
+                    drvAudioStreamDestroyAsync(pThis, pStreamEx, fImmediate);
+                else
+                {
+                    int rc2 = RTReqPoolCallEx(pThis->hReqPool, 0 /*cMillies*/, NULL /*phReq*/,
+                                              RTREQFLAGS_VOID | RTREQFLAGS_NO_WAIT,
+                                              (PFNRT)drvAudioStreamDestroyAsync, 3, pThis, pStreamEx, fImmediate);
+                    LogFlowFunc(("hReqInitAsync=%p rc2=%Rrc\n", pStreamEx->hReqInitAsync, rc2));
+                    AssertRCStmt(rc2, drvAudioStreamDestroyAsync(pThis, pStreamEx, fImmediate));
+                }
             }
         }
         else
@@ -3953,8 +3955,8 @@ static DECLCALLBACK(void) drvAudioHostPort_DoOnWorkerThreadStreamWorker(PDRVAUDI
     AssertPtrReturnVoid(pIHostDrvAudio->pfnDoOnWorkerThread);
     pIHostDrvAudio->pfnDoOnWorkerThread(pIHostDrvAudio, pStreamEx->pBackend, uUser, pvUser);
 
-    drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
-    LogFlowFunc(("returns\n"));
+    uint32_t const cRefs = drvAudioStreamReleaseInternal(pThis, pStreamEx, true /*fMayDestroy*/);
+    LogFlowFunc(("returns (cRefs=%u)\n", cRefs)); RT_NOREF(cRefs);
 }
 
 
@@ -4774,6 +4776,7 @@ static DECLCALLBACK(int) drvAudioConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, u
                                   "DriverName|"
                                   "InputEnabled|"
                                   "OutputEnabled|"
+                                  "CacheEnabled|"
                                   "DebugEnabled|"
                                   "DebugPathOut|"
                                   /* Deprecated: */
@@ -4842,13 +4845,17 @@ static DECLCALLBACK(int) drvAudioConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, u
         char         szNm[48];
         PDRVAUDIOCFG pAudioCfg = iDir == 0 ? &pThis->CfgIn : &pThis->CfgOut;
         const char  *pszDir    = iDir == 0 ? "In"           : "Out";
+        size_t const cbDir     = iDir == 0 ? sizeof("In")   : sizeof("Out");
 
 #define QUERY_VAL_RET(a_Width, a_szName, a_pValue, a_uDefault, a_ExprValid, a_szValidRange) \
             do { \
-                rc = RT_CONCAT(pHlp->pfnCFGMQueryU,a_Width)(pDirNode, strcpy(szNm, a_szName), a_pValue); \
+                AssertCompile(sizeof(szNm) >= sizeof(a_szName "Out")); \
+                memcpy(szNm, a_szName, sizeof(a_szName)); \
+                rc = RT_CONCAT(pHlp->pfnCFGMQueryU,a_Width)(pDirNode, szNm, a_pValue); \
                 if (rc == VERR_CFGM_VALUE_NOT_FOUND || rc == VERR_CFGM_NO_PARENT) \
                 { \
-                    rc = RT_CONCAT(pHlp->pfnCFGMQueryU,a_Width)(pCfg, strcat(szNm, pszDir), a_pValue); \
+                    memcpy(&szNm[sizeof(a_szName) - 1], pszDir, cbDir); \
+                    rc = RT_CONCAT(pHlp->pfnCFGMQueryU,a_Width)(pCfg, szNm, a_pValue); \
                     if (rc == VERR_CFGM_VALUE_NOT_FOUND || rc == VERR_CFGM_NO_PARENT) \
                     { \
                         *(a_pValue) = a_uDefault; \
