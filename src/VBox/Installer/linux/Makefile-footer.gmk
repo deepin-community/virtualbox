@@ -6,7 +6,7 @@
 #
 
 #
-# Copyright (C) 2006-2024 Oracle and/or its affiliates.
+# Copyright (C) 2006-2025 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -115,6 +115,7 @@ VBOXMOD_EXT := ko
 
 # build defs
 EXTRA_CFLAGS += $(VBOXMOD_CFLAGS) $(addprefix -I,$(KERN_INCL) $(VBOXMOD_INCL)) $(VBOXMOD_0_KFLAGS) $(KDEBUG)
+ccflags-y += $(EXTRA_CFLAGS)
 $(VBOXMOD_0_TARGET)-y := $(VBOXMOD_OBJS)
 obj-m += $(VBOXMOD_0_TARGET).o
 

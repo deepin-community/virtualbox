@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2025 Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -82,6 +82,12 @@
 
 #if RTLNX_VER_MAX(2,5,12)
 # define PageUptodate(a_pPage) Page_Uptodate(a_pPage)
+#endif
+
+#if RTLNX_VER_MIN(6,16,0)
+# define VBOX_PAGE_INDEX(_page) (_page->__folio_index)
+#else
+# define VBOX_PAGE_INDEX(_page) (_page->index)
 #endif
 
 
@@ -1789,7 +1795,7 @@ static void vbsf_reg_write_sync_page_cache(struct address_space *mapping, loff_t
             struct page  *pDstPage   = find_lock_page(mapping, idxPage);
             if (pDstPage) {
                 if (   pDstPage->mapping == mapping /* ignore if re-purposed (paranoia) */
-                    && pDstPage->index == idxPage
+                    && VBOX_PAGE_INDEX(pDstPage) == idxPage
                     && !PageDirty(pDstPage)         /* ignore if dirty */
                     && !PageWriteback(pDstPage)     /* ignore if being written back */ ) {
                     /*
@@ -1820,7 +1826,7 @@ static void vbsf_reg_write_sync_page_cache(struct address_space *mapping, loff_t
 # endif
                 } else
                     SFLOGFLOW(("vbsf_reg_write_sync_page_cache: Skipping page %p: mapping=%p (vs %p) writeback=%d offset=%#lx (vs%#lx)\n",
-                               pDstPage, pDstPage->mapping, mapping, PageWriteback(pDstPage), pDstPage->index, idxPage));
+                               pDstPage, pDstPage->mapping, mapping, PageWriteback(pDstPage), VBOX_PAGE_INDEX(pDstPage), idxPage));
                 unlock_page(pDstPage);
                 vbsf_put_page(pDstPage);
             }
@@ -3632,7 +3638,7 @@ static int vbsf_readpage(struct file *file, struct page *page)
     struct inode *inode = VBSF_GET_F_DENTRY(file)->d_inode;
     int           err;
 
-    SFLOGFLOW(("vbsf_readpage: inode=%p file=%p page=%p off=%#llx\n", inode, file, page, (uint64_t)page->index << PAGE_SHIFT));
+    SFLOGFLOW(("vbsf_readpage: inode=%p file=%p page=%p off=%#llx\n", inode, file, page, (uint64_t)VBOX_PAGE_INDEX(page) << PAGE_SHIFT));
     Assert(PageLocked(page));
 
     if (PageUptodate(page)) {
@@ -3653,7 +3659,7 @@ static int vbsf_readpage(struct file *file, struct page *page)
             vrc = VbglR0SfHostReqReadPgLst(pSuperInfo->map.root,
                                            pReq,
                                            sf_r->Handle.hHost,
-                                           (uint64_t)page->index << PAGE_SHIFT,
+                                           (uint64_t)VBOX_PAGE_INDEX(page) << PAGE_SHIFT,
                                            PAGE_SIZE,
                                            1 /*cPages*/);
 
@@ -3695,11 +3701,12 @@ static int vbsf_readpage(struct file *file, struct page *page)
  * Needed for mmap and writes when the file is mmapped in a shared+writeable
  * fashion.
  */
-#if RTLNX_VER_MIN(2,5,52)
+#if RTLNX_VER_MAX(6,16,0)
+# if RTLNX_VER_MIN(2,5,52)
 static int vbsf_writepage(struct page *page, struct writeback_control *wbc)
-#else
+# else
 static int vbsf_writepage(struct page *page)
-#endif
+# endif
 {
     struct address_space   *mapping = page->mapping;
     struct inode           *inode   = mapping->host;
@@ -3742,11 +3749,11 @@ static int vbsf_writepage(struct page *page)
                     && offEndOfWrite > i_size_read(inode))
                     i_size_write(inode, offEndOfWrite);
 
-#if RTLNX_VER_MAX(6,12,0)
+# if RTLNX_VER_MAX(6,12,0)
                 /* Update and unlock the page. */
                 if (PageError(page))
                     ClearPageError(page);
-#endif
+# endif
                 SetPageUptodate(page);
                 unlock_page(page);
 
@@ -3768,12 +3775,13 @@ static int vbsf_writepage(struct page *page)
             printk("vbsf_writepage: no writable handle for %s..\n", sf_i->path->String.ach);
         err = -EIO;
     }
-#if RTLNX_VER_MAX(6,12,0)
+# if RTLNX_VER_MAX(6,12,0)
     SetPageError(page);
-#endif
+# endif
     unlock_page(page);
     return err;
 }
+#endif /* < 6.16.0 */
 
 
 #if RTLNX_VER_MIN(2,6,24)
@@ -3798,7 +3806,14 @@ static inline void vbsf_write_begin_warn(loff_t pos, unsigned len, unsigned flag
     }
 }
 
-# if RTLNX_VER_MIN(6,12,0)
+# if RTLNX_VER_MIN(6,17,0)
+static int vbsf_write_begin(const struct kiocb *iocb, struct address_space *mapping, loff_t pos,
+                     unsigned len, struct folio **foliop, void **fsdata)
+{
+    vbsf_write_begin_warn(pos, len, 0);
+    return simple_write_begin(iocb, mapping, pos, len, foliop, fsdata);
+}
+# elif RTLNX_VER_MIN(6,12,0)
 static int vbsf_write_begin(struct file *file, struct address_space *mapping, loff_t pos,
                      unsigned len, struct folio **foliop, void **fsdata)
 {
@@ -3827,7 +3842,12 @@ static int vbsf_write_begin(struct file *file, struct address_space *mapping, lo
 /**
  * Companion to vbsf_write_begin (i.e. shouldn't be called).
  */
-# if RTLNX_VER_MIN(6,12,0)
+
+# if RTLNX_VER_MIN(6,17,0)
+static int vbsf_write_end(const struct kiocb *iocb, struct address_space *mapping,
+                          loff_t pos, unsigned int len, unsigned int copied,
+                          struct folio *folio, void *fsdata)
+# elif RTLNX_VER_MIN(6,12,0)
 static int vbsf_write_end(struct file *file, struct address_space *mapping,
                           loff_t pos, unsigned int len, unsigned int copied,
                           struct folio *folio, void *fsdata)
@@ -3905,7 +3925,9 @@ struct address_space_operations vbsf_reg_aops = {
 #else
     .readpage       = vbsf_readpage,
 #endif
+#if RTLNX_VER_MAX(6,16,0)
     .writepage      = vbsf_writepage,
+#endif
     /** @todo Need .writepages if we want msync performance...  */
 #if RTLNX_VER_MIN(5,18,0) || RTLNX_RHEL_RANGE(9,2, 9,99)
     .dirty_folio = filemap_dirty_folio,

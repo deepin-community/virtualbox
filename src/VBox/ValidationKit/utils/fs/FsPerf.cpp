@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2019-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2019-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -6313,7 +6313,7 @@ static void Usage(PRTSTREAM pStrm)
         const char *pszHelp;
         switch (g_aCmdOptions[i].iShort)
         {
-            case 'd':                           pszHelp = "The directory to use for testing.            default: CWD/fstestdir"; break;
+            case 'd':                           pszHelp = "The directory to use for testing.            default: <temp>/fstestdir-<PID>"; break;
             case 'r':                           pszHelp = "Don't abspath test dir (good for deep dirs). default: disabled"; break;
             case 'e':                           pszHelp = "Enables all tests.                           default: -e"; break;
             case 'z':                           pszHelp = "Disables all tests.                          default: -e"; break;
@@ -6600,9 +6600,14 @@ int main(int argc, char *argv[])
 #undef CASE_OPT
 
             case kCmdOpt_ManyFiles:
-                g_fManyFiles = ValueUnion.u32 > 0;
-                g_cManyFiles = ValueUnion.u32;
-                break;
+                if (ValueUnion.u32 <= _256K * 8) /* Limit bitmap size to 256KB to avoid running out of stack. */
+                {
+                    g_fManyFiles = ValueUnion.u32 > 0;
+                    g_cManyFiles = ValueUnion.u32;
+                    break;
+                }
+                RTTestFailed(g_hTest, "Out of range --many-files value: %u (%#x)\n", ValueUnion.u32, ValueUnion.u32);
+                return RTTestSummaryAndDestroy(g_hTest);
 
             case kCmdOpt_NoManyFiles:
                 g_fManyFiles = false;
@@ -6713,7 +6718,7 @@ int main(int argc, char *argv[])
 
             case 'V':
             {
-                char szRev[] = "$Revision: 164827 $";
+                char szRev[] = "$Revision: 170187 $";
                 szRev[RT_ELEMENTS(szRev) - 2] = '\0';
                 RTPrintf(RTStrStrip(strchr(szRev, ':') + 1));
                 return RTEXITCODE_SUCCESS;

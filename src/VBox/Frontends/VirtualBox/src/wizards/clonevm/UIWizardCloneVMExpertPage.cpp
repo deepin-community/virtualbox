@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2011-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2011-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -91,7 +91,9 @@ void UIWizardCloneVMExpertPage::prepare(const QString &strOriginalName, const QS
     if (m_pCloneTypeGroupBox)
         connect(m_pCloneTypeGroupBox, &UICloneVMCloneTypeGroupBox::sigFullCloneSelected,
                 this, &UIWizardCloneVMExpertPage::sltCloneTypeChanged);
-
+    if (m_pCloneModeGroupBox)
+        connect(m_pCloneModeGroupBox, &UICloneVMCloneModeGroupBox::sigCloneModeChanged,
+                this, &UIWizardCloneVMExpertPage::sltCloneModeChanged);
     sltRetranslateUI();
 }
 
@@ -105,7 +107,7 @@ void UIWizardCloneVMExpertPage::sltRetranslateUI()
     if (m_pCloneModeGroupBox)
         m_pCloneModeGroupBox->setTitle(UIWizardCloneVM::tr("Snapshots"));
     if (m_pAdditionalOptionsGroupBox)
-        m_pAdditionalOptionsGroupBox->setTitle(UIWizardCloneVM::tr("Additional Options"));
+        m_pAdditionalOptionsGroupBox->setTitle(UIWizardCloneVM::tr("OS Installation Options"));
 }
 
 void UIWizardCloneVMExpertPage::initializePage()
@@ -198,4 +200,13 @@ void UIWizardCloneVMExpertPage::sltCloneTypeChanged(bool fIsFullClone)
     AssertReturnVoid(pWizard);
     pWizard->setLinkedClone(!fIsFullClone);
     setCloneModeGroupBoxEnabled();
+    emit completeChanged();
+}
+
+void UIWizardCloneVMExpertPage::sltCloneModeChanged(KCloneMode enmCloneMode)
+{
+    UIWizardCloneVM *pWizard = wizardWindow<UIWizardCloneVM>();
+    AssertReturnVoid(pWizard);
+    pWizard->setCloneMode(enmCloneMode);
+    emit completeChanged();
 }

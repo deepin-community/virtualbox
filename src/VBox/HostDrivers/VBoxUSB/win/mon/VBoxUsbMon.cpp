@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2011-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2011-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -77,7 +77,7 @@
  * applying existing filters.
  *
  * Newly arrived USB devices are intercepted early in their PnP enumeration
- * through the hooked bus driver dispatch routine. Devices which satisty the
+ * through the hooked bus driver dispatch routine. Devices which satisfy the
  * filter matching criteria are morphed (see above) such that VBoxUSB.sys loads
  * for them before any default driver does.
  *
@@ -1116,15 +1116,23 @@ static NTSTATUS _stdcall VBoxUsbMonClose(PDEVICE_OBJECT pDevObj, PIRP pIrp)
             PDEVICE_OBJECT pTmpDevObj;
             RtlInitUnicodeString(&UniName, USBMON_DEVICE_NAME_NT);
             NTSTATUS tmpStatus = IoGetDeviceObjectPointer(&UniName, FILE_ALL_ACCESS, &g_VBoxUsbMonGlobals.pPreventUnloadFileObj, &pTmpDevObj);
-            AssertRelease(NT_SUCCESS(tmpStatus));
-            AssertRelease(pTmpDevObj == pDevObj);
+            if (tmpStatus == STATUS_SUCCESS)
+            {
+                Assert(pTmpDevObj == pDevObj); RT_NOREF(pDevObj);
+            }
+            else
+            {
+                WARN(("IoGetDeviceObjectPointer() failed with status 0x%x", tmpStatus));
+                AssertFailed();
+                /** @todo r=andy Shouldn't we set Status to failed here? See @bugref{10919}. */
+            }
         }
         else
         {
             WARN(("ulPreventUnloadOn already set"));
         }
         LOG(("success!!"));
-        Status = STATUS_SUCCESS;
+        Status = STATUS_SUCCESS; /** @todo r=andy Really? See above. */
     }
     pFileObj->FsContext = NULL;
     pIrp->IoStatus.Status = Status;

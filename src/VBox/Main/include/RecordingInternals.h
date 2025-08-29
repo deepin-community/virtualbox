@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2012-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2012-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -31,14 +31,19 @@
 # pragma once
 #endif
 
-#include <list>
+#ifdef IN_VBOXSVC
+# error "Using RecordingInternals.h is prohibited in VBoxSVC!"
+#endif
 
+#include <list>
+#include <map>
+
+#include <iprt/asm.h>
 #include <iprt/assert.h>
 #include <iprt/types.h> /* drag in stdint.h before vpx does it. */
 
 #include "VBox/com/string.h"
 #include "VBox/com/VirtualBox.h"
-#include "VBox/settings.h"
 #include <VBox/vmm/pdmaudioifs.h>
 
 #ifdef VBOX_WITH_LIBVPX
@@ -51,6 +56,8 @@
 #ifdef VBOX_WITH_LIBVORBIS
 # include "vorbis/vorbisenc.h"
 #endif
+
+#include "RecordingContext.h" /* For RECORDINGPIXELFMT. */
 
 
 /*********************************************************************************************************************************
@@ -73,19 +80,6 @@ typedef RECORDINGFRAME *PRECORDINGFRAME;
 /*********************************************************************************************************************************
 *   Internal structures, defines and APIs                                                                                        *
 *********************************************************************************************************************************/
-
-/**
- * Enumeration for supported pixel formats.
- */
-enum RECORDINGPIXELFMT
-{
-    /** Unknown pixel format. */
-    RECORDINGPIXELFMT_UNKNOWN    = 0,
-    /** BRGA 32. */
-    RECORDINGPIXELFMT_BRGA32     = 1,
-    /** The usual 32-bit hack. */
-    RECORDINGPIXELFMT_32BIT_HACK = 0x7fffffff
-};
 
 /**
  * Structure for keeping recording surface information.
@@ -539,7 +533,7 @@ int RecordingVideoFrameInit(PRECORDINGVIDEOFRAME pFrame, uint32_t fFlags, uint32
 void RecordingVideoFrameDestroy(PRECORDINGVIDEOFRAME pFrame);
 PRECORDINGVIDEOFRAME RecordingVideoFrameDup(PRECORDINGVIDEOFRAME pFrame);
 void RecordingVideoFrameClear(PRECORDINGVIDEOFRAME pFrame);
-int RecordingVideoFrameBlitRawAlpha(PRECORDINGVIDEOFRAME pDstFrame, uint32_t uDstX, uint32_t uDstY, const uint8_t *pu8Src, size_t cbSrc, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight, uint32_t uSrcBytesPerLine, uint8_t uSrcBPP, RECORDINGPIXELFMT enmFmt);
+void RecordingVideoFrameBlitRawAlpha(PRECORDINGVIDEOFRAME pDstFrame, uint32_t uDstX, uint32_t uDstY, const uint8_t *pu8Src, size_t cbSrc, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight, uint32_t uSrcBytesPerLine, uint8_t uSrcBPP, RECORDINGPIXELFMT enmFmt);
 int RecordingVideoBlitRaw(uint8_t *pu8Dst, size_t cbDst, uint32_t uDstX, uint32_t uDstY, uint32_t uDstBytesPerLine, uint8_t uDstBPP, RECORDINGPIXELFMT enmDstFmt, const uint8_t *pu8Src, size_t cbSrc, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight, uint32_t uSrcBytesPerLine, uint8_t uSrcBPP, RECORDINGPIXELFMT enmSrcFmt);
 int RecordingVideoFrameBlitRaw(PRECORDINGVIDEOFRAME pDstFrame, uint32_t uDstX, uint32_t uDstY, const uint8_t *pu8Src, size_t cbSrc, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight, uint32_t uSrcBytesPerLine, uint8_t uSrcBPP, RECORDINGPIXELFMT enmFmt);
 int RecordingVideoFrameBlitFrame(PRECORDINGVIDEOFRAME pDstFrame, uint32_t uDstX, uint32_t uDstY, PRECORDINGVIDEOFRAME pSrcFrame, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight);
@@ -558,6 +552,7 @@ struct RecordingBlock
     RecordingBlock()
         : cRefs(0)
         , uFlags(RECORDINGCODEC_ENC_F_NONE)
+        , msTimestamp(0)
         , pvData(NULL)
         , cbData(0) { }
 
@@ -566,13 +561,70 @@ struct RecordingBlock
         Destroy();
     }
 
+    /**
+     * Returns the current reference count.
+     *
+     * @returns  Number of current references.
+     */
+    uint64_t GetRefs(void)
+    {
+        Assert(cRefs <= 4); /* Helps finding refcounting bugs. Value chosen at random. */
+        return ASMAtomicReadU64(&cRefs);
+    }
+
+    /**
+     * Adds a reference to a recording block.
+     *
+     * @returns  Number of new references.
+     */
+    uint64_t AddRef(void)
+    {
+        Assert(cRefs <= 4); /* Helps finding refcounting bugs. Value chosen at random. */
+        return ASMAtomicIncU64(&cRefs);
+    }
+
+    /**
+     * Releases a reference to a recording block.
+     *
+     * @returns  Number of new references after release.
+     */
+    uint64_t Release(void)
+    {
+        Assert(cRefs);
+        return ASMAtomicDecU64(&cRefs);
+    }
+
+    /**
+     * Unlinks the stored data (giving up ownership).
+     *
+     * @note All references to this recording block must be released first.
+     *
+     * @returns Pointer to unlinked data. Can be NULL if no data stored.
+     * @param   pcbData         Where to return the size (in bytes) of the returned data. Optional and can be NULL.
+     */
+    void *Unlink(size_t *pcbData)
+    {
+        AssertMsgReturn(cRefs == 0, ("Can't unlink data, as there are references to it (%RU64)\n", cRefs), NULL);
+
+        void *pvDataUnlinked = pvData;
+        if (pcbData)
+            *pcbData = cbData;
+
+        pvData  = NULL;
+        cbData  = 0;
+
+        return pvDataUnlinked;
+    }
+
+    /**
+     * Destroys a recording block.
+     *
+     * @note Must be released via Release() first.
+     */
     void Destroy(void)
     {
-        PRECORDINGFRAME pFrame = (PRECORDINGFRAME)pvData;
-        if (!pFrame)
-            return;
-
-        RecordingFrameFree(pFrame);
+        AssertMsgReturnVoid(cRefs == 0, ("Recording block still holds references (%RU64)\n", cRefs));
+        RecordingFrameFree((PRECORDINGFRAME)pvData);
 
         cRefs   = 0;
         pvData  = NULL;
@@ -580,7 +632,7 @@ struct RecordingBlock
     }
 
     /** Number of references held of this block. */
-    uint16_t           cRefs;
+    uint64_t           cRefs;
     /** Block flags of type RECORDINGCODEC_ENC_F_XXX. */
     uint64_t           uFlags;
     /** The (absolute) timestamp (in ms, PTS) of this block. */
@@ -594,9 +646,130 @@ struct RecordingBlock
 /** List for keeping video recording (data) blocks. */
 typedef std::list<RecordingBlock *> RecordingBlockList;
 
+/** Structure for queuing all blocks bound to a single timecode.
+ *  This can happen if multiple tracks are being involved. */
+struct RecordingBlocks
+{
+    virtual ~RecordingBlocks()
+    {
+        Clear();
+    }
+
+    /**
+     * Resets a recording block list by removing (destroying)
+     * all current elements.
+     */
+    void Clear()
+    {
+        while (!List.empty())
+        {
+            RecordingBlock *pBlock = List.front();
+            if (pBlock->GetRefs() == 0)
+            {
+                List.pop_front();
+                delete pBlock;
+            }
+        }
+
+        Assert(List.size() == 0);
+    }
+
+    /** The actual block list for this timecode. */
+    RecordingBlockList List;
+};
+
+/** A block map containing all currently queued blocks.
+ *  The key specifies a unique timecode, whereas the value
+ *  is a list of blocks which all correlate to the same key (timecode). */
+typedef std::map<uint64_t, RecordingBlocks *> RecordingBlockMap;
+
+/**
+ * Structure for holding a set of recording (data) blocks.
+ */
+struct RecordingBlockSet
+{
+    /**
+     * Constructor.
+     *
+     * Will throw rc on failure.
+     */
+    RecordingBlockSet()
+        : tsLastProcessedMs(0)
+    {
+        int const vrc = RTCritSectInit(&CritSect);
+        if (RT_FAILURE(vrc))
+            throw vrc;
+    }
+
+    virtual ~RecordingBlockSet()
+    {
+        Clear();
+
+        RTCritSectDelete(&CritSect);
+    }
+
+    /**
+     * Inserts a block list within the given PTS.
+     *
+     * @param  uPTS             Timestamp (PTS) to insert block list to.
+     * @param  pBlocks          Block list to insert.
+     *                          This class will take ownership of the data.
+     */
+    int Insert(uint64_t uPTS, RecordingBlocks *pBlocks)
+    {
+        int vrc = RTCritSectEnter(&CritSect);
+        if (RT_SUCCESS(vrc))
+        {
+            try
+            {
+                Map.insert(std::make_pair(uPTS, pBlocks));
+            }
+            catch (std::bad_alloc &)
+            {
+                vrc = VERR_NO_MEMORY;
+            }
+            RTCritSectLeave(&CritSect);
+        }
+
+        return vrc;
+    }
+
+    /**
+     * Resets a recording block set by removing (destroying)
+     * all current elements.
+     */
+    void Clear(void)
+    {
+        int vrc = RTCritSectEnter(&CritSect);
+        if (RT_SUCCESS(vrc))
+        {
+            RecordingBlockMap::iterator it = Map.begin();
+            while (it != Map.end())
+            {
+                it->second->Clear();
+                delete it->second;
+                Map.erase(it);
+                it = Map.begin();
+            }
+
+            Assert(Map.size() == 0);
+
+            RTCritSectLeave(&CritSect);
+        }
+    }
+
+    /** Critical section for protecting the set. */
+    RTCRITSECT        CritSect;
+    /** Timestamp (in ms) when this set was last processed.
+     *  Set to 0 if not processed yet. */
+    uint64_t          tsLastProcessedMs;
+    /** All blocks related to this block set. */
+    RecordingBlockMap Map;
+};
+
 int recordingCodecCreateAudio(PRECORDINGCODEC pCodec, RecordingAudioCodec_T enmAudioCodec);
 int recordingCodecCreateVideo(PRECORDINGCODEC pCodec, RecordingVideoCodec_T enmVideoCodec);
-int recordingCodecInit(const PRECORDINGCODEC pCodec, const PRECORDINGCODECCALLBACKS pCallbacks, const settings::RecordingScreen &Settings);
+int recordingCodecInit(const PRECORDINGCODEC pCodec, const PRECORDINGCODECCALLBACKS pCallbacks, const ComPtr<IRecordingScreenSettings> &ScreenSettings);
 int recordingCodecDestroy(PRECORDINGCODEC pCodec);
 int recordingCodecEncodeFrame(PRECORDINGCODEC pCodec, const PRECORDINGFRAME pFrame, uint64_t msTimestamp, void *pvUser);
 int recordingCodecEncodeCurrent(PRECORDINGCODEC pCodec, uint64_t msTimestamp);

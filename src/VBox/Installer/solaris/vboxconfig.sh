@@ -5,7 +5,7 @@
 #
 
 #
-# Copyright (C) 2009-2024 Oracle and/or its affiliates.
+# Copyright (C) 2009-2025 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -944,7 +944,7 @@ install_python_bindings()
     else
         errorprint "Failed to install bindings for Python $PYTHON_VER"
     fi
-    rm "$CONFIG_DIR/python-$CONFIG_FILES"
+    rm -f "$CONFIG_DIR/python-$CONFIG_FILES"
 
     # Remove files created by Python API setup.
     rm -rf "$MY_PYTHON_INSTALLER_PATH/build"
@@ -1346,6 +1346,9 @@ cleanup_install()
 postinstall()
 {
     infoprint "Detected Solaris $HOST_OS_MAJORVERSION Version $HOST_OS_MINORVERSION"
+
+    # Ensure XPCOM components are re-registered properly on first use.
+    touch "$VBOX_INSTALL_PATH/.autoreg"
 
     infoprint "Loading VirtualBox kernel modules..."
     install_drivers

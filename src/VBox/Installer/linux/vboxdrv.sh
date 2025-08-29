@@ -3,7 +3,7 @@
 # Linux kernel module init script
 
 #
-# Copyright (C) 2006-2024 Oracle and/or its affiliates.
+# Copyright (C) 2006-2025 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -100,9 +100,10 @@ fi
 
 KERN_VER=`uname -r`
 
-# Prepend PATH for building UEK7 on OL8 distribution.
+# Prepend PATH for building UEK on OL8/9 distributions.
 case "$KERN_VER" in
     5.15.0-*.el8uek*) PATH="/opt/rh/gcc-toolset-11/root/usr/bin:$PATH";;
+    6.12.0-*.el9uek*)PATH="/opt/rh/gcc-toolset-14/root/usr/bin:$PATH";;
 esac
 
 if test -e "${MODULE_SRC}/vboxpci"; then

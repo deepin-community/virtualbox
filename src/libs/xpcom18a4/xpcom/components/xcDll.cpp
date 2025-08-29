@@ -65,6 +65,8 @@
 
 #include "nsNativeComponentLoader.h"
 #include "nsMemory.h"
+#include <VBox/log.h>
+
 
 nsDll::nsDll(nsIFile *dllSpec, nsNativeComponentLoader *loader)
     : m_dllSpec(do_QueryInterface(dllSpec)),
@@ -115,6 +117,7 @@ nsDll::HasChanged()
     nsresult rv = m_dllSpec->GetLastModifiedTime(&currentDate);
     if (NS_FAILED(rv))
         return PR_TRUE;
+    Log2(("nsDll::HasChanged: currentDate=%RI64\n", currentDate));
     PRBool changed = PR_TRUE;
     manager->HasFileChanged(m_dllSpec, nsnull, currentDate, &changed);
     return changed;
@@ -131,7 +134,7 @@ PRBool nsDll::Load(void)
 #ifdef NS_BUILD_REFCNT_LOGGING
         nsTraceRefcntImpl::SetActivityIsLegal(PR_FALSE);
 #endif
-
+#ifndef VBOX /* This is related to DEPENDENT_LIBS, which we've disabled. */
         // Load any library dependencies
         //   The Component Loader Manager may hold onto some extra data
         //   set by either the native component loader or the native
@@ -144,6 +147,7 @@ PRBool nsDll::Load(void)
         nsCOMPtr<nsIComponentLoaderManager> manager = do_QueryInterface(m_loader->mCompMgr);
         if (!manager)
             return PR_TRUE;
+
 
         nsXPIDLCString extraData;
         manager->GetOptionalData(m_dllSpec, nsnull, getter_Copies(extraData));
@@ -220,12 +224,14 @@ PRBool nsDll::Load(void)
             }
             nsMemory::Free(buffer);
         }
+#endif /* !VBOX */
 
         // load the component
         nsCOMPtr<nsILocalFile> lf(do_QueryInterface(m_dllSpec));
         NS_ASSERTION(lf, "nsIFile here must implement a nsILocalFile");
         lf->Load(&m_hMod);
 
+#ifndef VBOX /* This is related to DEPENDENT_LIBS, which we've disabled. */
         // Unload any of library dependencies we loaded earlier. The assumption
         // here is that the component will have a "internal" reference count to
         // the dependency library we just loaded.
@@ -236,6 +242,7 @@ PRBool nsDll::Load(void)
             for (PRInt32 index = 0; index < arrayCount; index++)
                 RTLdrClose((RTLDRMOD)dependentLibArray.ElementAt(index));
         }
+#endif /* !VBOX */
 
 #ifdef NS_BUILD_REFCNT_LOGGING
         nsTraceRefcntImpl::SetActivityIsLegal(PR_TRUE);
