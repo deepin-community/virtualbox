@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2024 Oracle and/or its affiliates.
+ * Copyright (C) 2024-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -89,6 +89,9 @@ static const RTSCRIPTLEXTOKMATCH s_aMatches[] =
 {
     /* Begin of stuff which will get ignored in the semantic matching. */
     { RT_STR_TUPLE(".private_extern"),          RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
+    { RT_STR_TUPLE(".cpu"),                     RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
+    { RT_STR_TUPLE("generic+mte"),              RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
+    { RT_STR_TUPLE("generic+the+d128"),         RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
     { RT_STR_TUPLE("_testproca64"),             RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
     { RT_STR_TUPLE("_testproca64_endproc"),     RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
     { RT_STR_TUPLE(":"),                        RTSCRIPTLEXTOKTYPE_KEYWORD,    true,  0 },
@@ -99,6 +102,8 @@ static const RTSCRIPTLEXTOKMATCH s_aMatches[] =
     { RT_STR_TUPLE("["),                        RTSCRIPTLEXTOKTYPE_PUNCTUATOR, false, 0 },
     { RT_STR_TUPLE("]"),                        RTSCRIPTLEXTOKTYPE_PUNCTUATOR, false, 0 },
     { RT_STR_TUPLE("!"),                        RTSCRIPTLEXTOKTYPE_PUNCTUATOR, false, 0 },
+    { RT_STR_TUPLE("{"),                        RTSCRIPTLEXTOKTYPE_PUNCTUATOR, false, 0 },
+    { RT_STR_TUPLE("}"),                        RTSCRIPTLEXTOKTYPE_PUNCTUATOR, false, 0 },
     { NULL, 0,                                  RTSCRIPTLEXTOKTYPE_INVALID,    false, 0 }
 };
 
@@ -121,7 +126,7 @@ static const RTSCRIPTLEXCFG s_LexCfg =
     /** pszDesc */
     "ARMv8 disassembler lexer",
     /** fFlags */
-    RTSCRIPT_LEX_CFG_F_CASE_INSENSITIVE,
+    RTSCRIPT_LEX_CFG_F_CASE_INSENSITIVE_LOWER,
     /** pszWhitespace */
     NULL,
     /** pszNewline */
@@ -173,7 +178,7 @@ static void testDisas(const char *pszSub, uint8_t const *pabInstrs, uintptr_t uE
     int rc = RTScriptLexCreateFromReader(&hLexSource, testDisasmLexerRead,
                                          NULL /*pfnDtor*/, &Rdr /*pvUser*/, cbSrc,
                                          NULL /*phStrCacheId*/, NULL /*phStrCacheStringLit*/,
-                                         &s_LexCfg);
+                                         NULL /*phStrCacheComments*/, &s_LexCfg);
     RTTESTI_CHECK_RC(rc, VINF_SUCCESS);
     if (RT_FAILURE(rc))
         return; /* Can't do our work if this fails. */
@@ -227,7 +232,8 @@ static void testDisas(const char *pszSub, uint8_t const *pabInstrs, uintptr_t uE
                 /* Build the lexer and compare that it semantically is equal to the source input. */
                 RTSCRIPTLEX hLexDis = NULL;
                 rc = RTScriptLexCreateFromString(&hLexDis, szOutput, NULL /*phStrCacheId*/,
-                                                 NULL /*phStrCacheStringLit*/, &s_LexCfg);
+                                                 NULL /*phStrCacheStringLit*/, NULL /*phStrCacheComments*/,
+                                                 &s_LexCfg);
                 RTTESTI_CHECK_RC(rc, VINF_SUCCESS);
                 if (RT_SUCCESS(rc))
                 {
@@ -484,13 +490,14 @@ static void testDisasComplianceAgaistCapstone(void)
                 rc = RTScriptLexCreateFromReader(&hLexCapstone, testDisasmLexerRead,
                                                  NULL /*pfnDtor*/, &Rdr /*pvUser*/, 0 /*cchBuf*/,
                                                  NULL /*phStrCacheId*/, NULL /*phStrCacheStringLit*/,
-                                                 &s_LexCfg);
+                                                 NULL /*phStrCacheComments*/, &s_LexCfg);
                 RTTESTI_CHECK_RC(rc, VINF_SUCCESS);
 
                 /* Build the lexer and compare that it semantically is equal to the source input. */
                 RTSCRIPTLEX hLexDis = NULL;
                 rc = RTScriptLexCreateFromString(&hLexDis, szOutput, NULL /*phStrCacheId*/,
-                                                 NULL /*phStrCacheStringLit*/, &s_LexCfg);
+                                                 NULL /*phStrCacheStringLit*/, NULL /*phStrCacheComments*/,
+                                                 &s_LexCfg);
                 RTTESTI_CHECK_RC(rc, VINF_SUCCESS);
                 if (RT_SUCCESS(rc))
                 {

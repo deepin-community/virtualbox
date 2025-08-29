@@ -13,7 +13,7 @@ Build-Depends: bzip2,
                docbook-xml,
                docbook-xsl,
                dpkg-dev (>= 1.15.6~),
-               g++-multilib [amd64 i386],
+               g++-multilib,
                genisoimage,
                glslang-tools,
                gsoap,
@@ -30,7 +30,6 @@ Build-Depends: bzip2,
                libgsoap-dev,
                liblzf-dev,
                liblzma-dev,
-               libidl-dev,
                libogg-dev,
                libpam0g-dev,
                libpixman-1-dev,
@@ -43,6 +42,7 @@ Build-Depends: bzip2,
                libsdl1.2-dev,
                libsdl2-dev,
                libssl-dev,
+#               libslirp-dev,
                libtpms-dev,
                libvncserver-dev,
                libvorbis-dev,
@@ -126,7 +126,8 @@ Conflicts: virtualbox-2.0,
            virtualbox-6.0,
            virtualbox-6.1,
            virtualbox-7.0,
-           virtualbox-7.1
+           virtualbox-7.1,
+           virtualbox-7.2,
 Description: x86 virtualization solution - base binaries
  VirtualBox is a free x86 virtualization solution allowing a wide range
  of x86 operating systems such as Windows, DOS, BSD or Linux to run on a
@@ -179,7 +180,7 @@ Package: virtualbox-guest-x11
 Section: contrib/x11
 Replaces: virtualbox-guest-x11-hwe (<< 7.0.16-dfsg-5)
 Breaks: virtualbox-guest-x11-hwe (<< 7.0.16-dfsg-5)
-Architecture: amd64 arm64 armhf i386
+Architecture: amd64 i386
 Depends: libnotify-bin,
          x11-xserver-utils,
          virtualbox-guest-utils (= ${binary:Version}),

@@ -1,10 +1,11 @@
+/* $Id: fuse.h $ */
 /** @file
- * Module to dynamically load libfuse/libosxfuse and load all symbols which are needed by
- * vboximg-mount.
+ * Module to dynamically load libfuse/libosxfuse and load all symbols
+ * which are needed by vboximg-mount.
  */
 
 /*
- * Copyright (C) 2019-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2019-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.

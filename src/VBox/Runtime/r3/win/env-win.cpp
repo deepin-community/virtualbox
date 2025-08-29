@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -495,7 +495,7 @@ RTDECL(int) RTEnvUnsetUtf8(const char *pszVar)
 #ifndef IPRT_NO_CRT
         if (_wgetenv(pwszVar))
         {
-            errno_t rcErrno = _wputenv_s(pwszVar, NULL);
+            errno_t rcErrno = _wputenv_s(pwszVar, L"");
             if (rcErrno == 0)
                 rc = VINF_SUCCESS;
             else

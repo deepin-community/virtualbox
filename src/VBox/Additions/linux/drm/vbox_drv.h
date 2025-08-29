@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2013-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2013-2025 Oracle and/or its affiliates.
  * This file is based on ast_drv.h
  * Copyright 2012 Red Hat Inc.
  *
@@ -432,6 +432,8 @@ int vbox_framebuffer_init(struct drm_device *dev,
 			  struct DRM_MODE_FB_CMD *mode_cmd,
 #endif
 			  struct drm_gem_object *obj);
+
+int vboxfb_create(struct drm_fb_helper *helper, struct drm_fb_helper_surface_size *sizes);
 
 int vbox_fbdev_init(struct drm_device *dev);
 void vbox_fbdev_fini(struct drm_device *dev);

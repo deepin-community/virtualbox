@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2012-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2012-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -1100,8 +1100,6 @@ static int vmxHCSwitchToGstOrNstGstVmcs(PVMCPUCC pVCpu, bool fSwitchToNstGstVmcs
         else
             ASMAtomicUoOrU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged, HM_CHANGED_HOST_CONTEXT | HM_CHANGED_VMX_HOST_GUEST_SHARED_STATE);
 
-        ASMSetFlags(fEFlags);
-
         /*
          * We use a different VM-exit MSR-store areas for the guest and nested-guest. Hence,
          * flag that we need to update the host MSR values there. Even if we decide in the
@@ -1109,9 +1107,14 @@ static int vmxHCSwitchToGstOrNstGstVmcs(PVMCPUCC pVCpu, bool fSwitchToNstGstVmcs
          * if its content differs, we would have to update the host MSRs anyway.
          */
         pVCpu->hmr0.s.vmx.fUpdatedHostAutoMsrs = false;
+
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+        AssertRC(hmR0VmxCheckVmcsMagic(fSwitchToNstGstVmcs));
+#endif
     }
-    else
-        ASMSetFlags(fEFlags);
+
+    ASMSetFlags(fEFlags);
+    AssertRC(rc);
     return rc;
 }
 
@@ -1397,6 +1400,19 @@ static int vmxHCCheckCachedVmcsCtls(PVMCPUCC pVCpu, PCVMXVMCSINFO pVmcsInfo, boo
 {
     const char * const pcszVmcs = fIsNstGstVmcs ? "Nested-guest VMCS" : "VMCS";
 
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+    {
+        uint64_t       uVmcsMagic = 0;
+        uint64_t const uExpectedMagic = fIsNstGstVmcs ? HMVMX_NST_GST_VMCS_MAGIC : HMVMX_GST_VMCS_MAGIC;
+        int const rcMagic = VMX_VMCS_READ_64(pVCpu, VMX_VMCS64_CTRL_EXEC_VMCS_PTR_FULL, &uVmcsMagic);
+        AssertRC(rcMagic);
+        AssertMsgReturnStmt(uVmcsMagic == uExpectedMagic,
+                            ("%s VMCS magic mismatch: Expected=%#RX32 VMCS=%#RX32\n", pcszVmcs, uExpectedMagic, uVmcsMagic),
+                            pVCpu->hm.s.u32HMError = VMX_VCI_VMCS_MAGIC_MISMATCH,
+                            VERR_VMX_VMCS_FIELD_CACHE_INVALID);
+    }
+#endif
+
     uint32_t u32Val;
     int rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_ENTRY, &u32Val);
     AssertRC(rc);
@@ -1419,18 +1435,12 @@ static int vmxHCCheckCachedVmcsCtls(PVMCPUCC pVCpu, PCVMXVMCSINFO pVmcsInfo, boo
                         VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PIN_EXEC,
                         VERR_VMX_VMCS_FIELD_CACHE_INVALID);
 
-    /** @todo Currently disabled for nested-guests because we run into bit differences
-     *        with for INT_WINDOW, RDTSC/P, see @bugref{10318}. Later try figure out
-     *        why and re-enable. */
-    if (!fIsNstGstVmcs)
-    {
-        rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_PROC_EXEC, &u32Val);
-        AssertRC(rc);
-        AssertMsgReturnStmt(pVmcsInfo->u32ProcCtls == u32Val,
-                            ("%s proc controls mismatch: Cache=%#RX32 VMCS=%#RX32\n", pcszVmcs, pVmcsInfo->u32ProcCtls, u32Val),
-                            VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PROC_EXEC,
-                            VERR_VMX_VMCS_FIELD_CACHE_INVALID);
-    }
+    rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_PROC_EXEC, &u32Val);
+    AssertRC(rc);
+    AssertMsgReturnStmt(pVmcsInfo->u32ProcCtls == u32Val,
+                        ("%s proc controls mismatch: Cache=%#RX32 VMCS=%#RX32\n", pcszVmcs, pVmcsInfo->u32ProcCtls, u32Val),
+                        VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PROC_EXEC,
+                        VERR_VMX_VMCS_FIELD_CACHE_INVALID);
 
     if (pVmcsInfo->u32ProcCtls & VMX_PROC_CTLS_USE_SECONDARY_CTLS)
     {
@@ -1699,7 +1709,7 @@ static void vmxHCExportGuestApicTpr(PVMCPUCC pVCpu, PCVMXTRANSIENT pVmxTransient
         if (!pVmxTransient->fIsNestedGuest)
         {
             if (   PDMHasApic(pVCpu->CTX_SUFF(pVM))
-                && APICIsEnabled(pVCpu))
+                && PDMApicIsEnabled(pVCpu))
             {
                 /*
                  * Setup TPR shadowing.
@@ -1709,7 +1719,7 @@ static void vmxHCExportGuestApicTpr(PVMCPUCC pVCpu, PCVMXTRANSIENT pVmxTransient
                     bool    fPendingIntr  = false;
                     uint8_t u8Tpr         = 0;
                     uint8_t u8PendingIntr = 0;
-                    int rc = APICGetTpr(pVCpu, &u8Tpr, &fPendingIntr, &u8PendingIntr);
+                    int rc = PDMApicGetTpr(pVCpu, &u8Tpr, &fPendingIntr, &u8PendingIntr);
                     AssertRC(rc);
 
                     /*
@@ -1805,11 +1815,13 @@ static void vmxHCExportGuestXcptIntercepts(PVMCPUCC pVCpu, PCVMXTRANSIENT pVmxTr
     if (ASMAtomicUoReadU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged) & HM_CHANGED_VMX_XCPT_INTERCEPTS)
     {
         /* When executing a nested-guest, we do not need to trap GIM hypercalls by intercepting #UD. */
-        if (   !pVmxTransient->fIsNestedGuest
-            &&  VCPU_2_VMXSTATE(pVCpu).fGIMTrapXcptUD)
-            vmxHCAddXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
-        else
-            vmxHCRemoveXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+        if (!pVmxTransient->fIsNestedGuest)
+        {
+            if (VCPU_2_VMXSTATE(pVCpu).fGIMTrapXcptUD)
+                vmxHCAddXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+            else
+                vmxHCRemoveXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+        }
 
         /* Other exception intercepts are handled elsewhere, e.g. while exporting guest CR0. */
         ASMAtomicUoAndU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged, ~HM_CHANGED_VMX_XCPT_INTERCEPTS);
@@ -3895,6 +3907,7 @@ static int vmxHCImportGuestStateEx(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo, uint6
                 {
                     Assert(CPUMIsGuestInVmxRootMode(pCtx));
                     rc = vmxHCCopyShadowToNstGstVmcs(pVCpu, pVmcsInfo);
+                    pVCpu->hm.s.vmx.fCopiedNstGstToShadowVmcs = false;
                     if (RT_SUCCESS(rc))
                     { /* likely */ }
                     else
@@ -4163,6 +4176,7 @@ static int vmxHCImportGuestStateInner(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo, ui
             Assert(CPUMIsGuestInVmxRootMode(&pVCpu->cpum.GstCtx));
             int const rc = vmxHCCopyShadowToNstGstVmcs(pVCpu, pVmcsInfo);
             AssertRCReturn(rc, rc);
+            pVCpu->hm.s.vmx.fCopiedNstGstToShadowVmcs = false;
         }
     }
 #endif
@@ -4350,7 +4364,7 @@ static VBOXSTRICTRC vmxHCCheckForceFlags(PVMCPUCC pVCpu, bool fIsNestedGuest, bo
      * Update pending interrupts into the APIC's IRR.
      */
     if (VMCPU_FF_TEST_AND_CLEAR(pVCpu, VMCPU_FF_UPDATE_APIC))
-        APICUpdatePendingInterrupts(pVCpu);
+        PDMApicUpdatePendingInterrupts(pVCpu);
 
     /*
      * Anything pending?  Should be more likely than not if we're doing a good job.
@@ -4483,14 +4497,13 @@ static void vmxHCTrpmTrapToPendingEvent(PVMCPUCC pVCpu)
     uint8_t     cbInstr;
     bool        fIcebp;
 
-    int rc = TRPMQueryTrapAll(pVCpu, &uVector, &enmTrpmEvent, &uErrCode, &GCPtrFaultAddress, &cbInstr, &fIcebp);
-    AssertRC(rc);
+    uVector = TRPMGetTrapAll(pVCpu, &enmTrpmEvent, &uErrCode, &GCPtrFaultAddress, &cbInstr, &fIcebp);
 
     uint32_t u32IntInfo;
     u32IntInfo  = uVector | VMX_IDT_VECTORING_INFO_VALID;
     u32IntInfo |= HMTrpmEventTypeToVmxEventType(uVector, enmTrpmEvent, fIcebp);
 
-    rc = TRPMResetTrap(pVCpu);
+    int const rc = TRPMResetTrap(pVCpu);
     AssertRC(rc);
     Log4(("TRPM->HM event: u32IntInfo=%#RX32 enmTrpmEvent=%d cbInstr=%u uErrCode=%#RX32 GCPtrFaultAddress=%#RGv\n",
           u32IntInfo, enmTrpmEvent, cbInstr, uErrCode, GCPtrFaultAddress));
@@ -4970,7 +4983,7 @@ static VBOXSTRICTRC vmxHCEvaluatePendingEvent(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcs
                         vmxHCApicSetTprThreshold(pVCpu, pVmcsInfo, u8Interrupt >> 4);
                     /*
                      * If the CPU doesn't have TPR shadowing, we will always get a VM-exit on TPR changes and
-                     * APICSetTpr() will end up setting the VMCPU_FF_INTERRUPT_APIC if required, so there is no
+                     * PDMApicSetTpr() will end up setting the VMCPU_FF_INTERRUPT_APIC if required, so there is no
                      * need to re-set this force-flag here.
                      */
                 }
@@ -11374,7 +11387,7 @@ static void vmxHCPreRunGuestDebugStateUpdate(PVMCPUCC pVCpu, PVMXTRANSIENT pVmxT
     /*
      * INT3 breakpoints - triggered by #BP exceptions.
      */
-    if (pVM->dbgf.ro.cEnabledInt3Breakpoints > 0)
+    if (pVM->dbgf.ro.cEnabledSwBreakpoints > 0)
         pDbgState->bmXcptExtra |= RT_BIT_32(X86_XCPT_BP);
 
     /*

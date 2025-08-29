@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2009-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2009-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -268,8 +268,15 @@ UIVMActivityOverviewRow::~UIVMActivityOverviewRow()
 
 void UIVMActivityOverviewRow::initCells()
 {
+    /* Hide VM exits in release builds: */
     for (int i = (int) VMActivityOverviewColumn_Name; i < (int) VMActivityOverviewColumn_Max; ++i)
+    {
+#ifndef DEBUG
+        if (i == (int) VMActivityOverviewColumn_VMExits)
+            continue;
+#endif
         m_cells[i] = new UIVMActivityOverviewCell(this);
+    }
     m_cells[VMActivityOverviewColumn_Name]->setText(m_strMachineName);
 }
 
@@ -442,15 +449,18 @@ QString UIVMActivityOverviewRowLocal::machineStateString() const
 UIVMActivityOverviewRowCloud::UIVMActivityOverviewRowCloud(QITableView *pTableView, const QUuid &uMachineId,
                                                                            const QString &strMachineName, CCloudMachine &comCloudMachine)
     : UIVMActivityOverviewRow(pTableView, uMachineId, strMachineName)
+    , m_pTimer(0)
     , m_comCloudMachine(comCloudMachine)
 {
-    updateMachineState();
+    /* Create timer prematurelly, it's used in updateMachineState() code: */
     m_pTimer = new QTimer(this);
     if (m_pTimer)
     {
         connect(m_pTimer, &QTimer::timeout, this, &UIVMActivityOverviewRowCloud::sltTimeout);
         m_pTimer->setInterval(60 * 1000);
     }
+
+    updateMachineState();
     resetColumData();
 }
 

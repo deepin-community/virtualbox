@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -3032,10 +3032,8 @@ void ConsoleVRDPServer::Stop(void)
             }
         }
 
-        if (mpEntryPoints && hServer)
-        {
+        if (mpEntryPoints)
             mpEntryPoints->VRDEDestroy(hServer);
-        }
     }
 
 #ifndef VBOX_WITH_VRDEAUTH_IN_VBOXSVC
@@ -3378,14 +3376,6 @@ DECLCALLBACK(int) ConsoleVRDPServer::ClipboardServiceExtension(void *pvExtension
                                              0,
                                              NULL);
             }
-        } break;
-
-        case VBOX_CLIPBOARD_EXT_FN_FORMAT_REPORT_TO_GUEST:
-        {
-            /* We need to handle this case here, to act as a no-op.
-             *
-             * If not being handled, this function otherwise would return VERR_NOT_SUPPORTED,
-             * which in turn then will invoke the host backend, messing up the VRDE clipboard handling. */
         } break;
 
         case VBOX_CLIPBOARD_EXT_FN_DATA_READ:

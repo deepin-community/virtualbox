@@ -4,7 +4,7 @@
 #
 
 #
-# Copyright (C) 2006-2024 Oracle and/or its affiliates.
+# Copyright (C) 2006-2025 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -136,29 +136,34 @@ mv virtualbox.xml $RPM_BUILD_ROOT/usr/share/mime/packages
 old_path="$PATH"
 PATH=${PATH#/opt/rh/devtoolset-4/root/usr/bin:}
 %endif
+%if "%BUILDREL%" == "openSUSE156"
+# For openSUSE156 we need GCC 10+ to build Qt 6.8 related code. However,
+# kernel modules need be built with older GCC.
+VBOX_EXTRA_FLAGS="CC=gcc-7"
+%endif
 for d in /lib/modules/*; do
   if [ -L $d/build ]; then
     rm -f /tmp/vboxdrv-Module.symvers
     ./src/vboxhost/build_in_tmp \
       --save-module-symvers /tmp/vboxdrv-Module.symvers \
       --module-source `pwd`/src/vboxhost/vboxdrv \
-      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT -j4 \
+      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT $VBOX_EXTRA_FLAGS -j4 \
       %INSTMOD%
     ./src/vboxhost/build_in_tmp \
       --use-module-symvers /tmp/vboxdrv-Module.symvers \
       --module-source `pwd`/src/vboxhost/vboxnetflt \
-      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT -j4 \
+      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT $VBOX_EXTRA_FLAGS -j4 \
       %INSTMOD%
     ./src/vboxhost/build_in_tmp \
       --use-module-symvers /tmp/vboxdrv-Module.symvers \
       --module-source `pwd`/src/vboxhost/vboxnetadp \
-      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT -j4 \
+      KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT $VBOX_EXTRA_FLAGS -j4 \
       %INSTMOD%
     if [ -e `pwd`/src/vboxhost/vboxpci ]; then
       ./src/vboxhost/build_in_tmp \
         --use-module-symvers /tmp/vboxdrv-Module.symvers \
         --module-source `pwd`/src/vboxhost/vboxpci \
-        KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT -j4 \
+        KBUILD_VERBOSE= KERN_VER=$(basename $d) INSTALL_MODULE_PATH=$RPM_BUILD_ROOT $VBOX_EXTRA_FLAGS -j4 \
         %INSTMOD%
     fi
   fi
@@ -167,6 +172,9 @@ done
 # For el7 restore PATH, see above.
 PATH="$old_path"
 unset old_path
+%endif
+%if "%BUILDREL%" == "openSUSE156"
+unset VBOX_EXTRA_FLAGS
 %endif
 rm -r src
 %endif
@@ -214,12 +222,17 @@ if [ -f $RPM_BUILD_ROOT/usr/lib/virtualbox/libQt6CoreVBox.so.6 ]; then
     $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/platforms/*.so \
     $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/platformthemes/*.so \
     $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/sqldrivers/*.so \
-    $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/styles/*.so || true
+    $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/styles/*.so \
+    $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/wayland-shell-integration/*.so \
+    $RPM_BUILD_ROOT/usr/lib/virtualbox/plugins/wayland-decoration-client/*.so || true
   echo "[Paths]" > $RPM_BUILD_ROOT/usr/lib/virtualbox/qt.conf
   echo "Plugins = /usr/lib/virtualbox/plugins" >> $RPM_BUILD_ROOT/usr/lib/virtualbox/qt.conf
 fi
 rm -f $RPM_BUILD_ROOT/usr/lib/virtualbox/chrpath
 ln -s ../VBoxVMM.so $RPM_BUILD_ROOT/usr/lib/virtualbox/components/VBoxVMM.so
+if [ -f $RPM_BUILD_ROOT/usr/lib/virtualbox/VBoxVMMArm.so ]; then
+  ln -s ../VBoxVMMArm.so $RPM_BUILD_ROOT/usr/lib/virtualbox/components/VBoxVMMArm.so
+fi
 for i in VirtualBoxVM VBoxHeadless VBoxNetDHCP VBoxNetNAT VBoxNetAdpCtl; do
   chmod 4511 $RPM_BUILD_ROOT/usr/lib/virtualbox/$i; done
 if [ -f $RPM_BUILD_ROOT/usr/lib/virtualbox/VBoxVolInfo ]; then

@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (C) 2006-2024 Oracle and/or its affiliates.
+ * Copyright (C) 2006-2025 Oracle and/or its affiliates.
  *
  * This file is part of VirtualBox base platform packages, as
  * available from https://www.virtualbox.org.
@@ -1426,7 +1426,7 @@ static DECLCALLBACK(void) drvAudioStreamInitAsync(PDRVAUDIO pThis, PDRVAUDIOSTRE
          */
         pStreamEx->fStatus |= PDMAUDIOSTREAM_STS_BACKEND_READY; /* before the backend control call! */
 
-        rc = drvAudioStreamUpdateBackendOnStatus(pThis, pStreamEx, "asynchronous initialization completed");
+        drvAudioStreamUpdateBackendOnStatus(pThis, pStreamEx, "asynchronous initialization completed");
 
         /*
          * Modify the play state if output stream.
@@ -3168,8 +3168,8 @@ static int drvAudioStreamPreBufComitting(PDRVAUDIO pThis, PDRVAUDIOSTREAM pStrea
         uint32_t cbPreBufWritten = 0;
         rc = pThis->pHostDrvAudio->pfnStreamPlay(pThis->pHostDrvAudio, pStreamEx->pBackend, &pStreamEx->Out.pbPreBuf[off],
                                                  cbToWrite, &cbPreBufWritten);
-        AssertRCBreak(rc);
-        if (!cbPreBufWritten)
+        if (   RT_FAILURE(rc)
+            || !cbPreBufWritten)
             break;
         AssertStmt(cbPreBufWritten <= cbToWrite, cbPreBufWritten = cbToWrite);
         off     = (off + cbPreBufWritten) % cbAlloc;

@@ -1,11 +1,11 @@
 #! /bin/sh
 # $Id: vboxadd.sh $
 ## @file
-# Linux Additions kernel module init script ($Revision: 168394 $)
+# Linux Additions kernel module init script ($Revision: 170187 $)
 #
 
 #
-# Copyright (C) 2006-2024 Oracle and/or its affiliates.
+# Copyright (C) 2006-2025 Oracle and/or its affiliates.
 #
 # This file is part of VirtualBox base platform packages, as
 # available from https://www.virtualbox.org.
@@ -536,9 +536,10 @@ setup_modules()
     export KERN_VER
     info "Building the modules for kernel $KERN_VER."
 
-    # Prepend PATH for building UEK7 on OL8 distribution.
+    # Prepend PATH for building UEK on OL8/9 distributions.
     case "$KERN_VER" in
         5.15.0-*.el8uek*) PATH="/opt/rh/gcc-toolset-11/root/usr/bin:$PATH";;
+        6.12.0-*.el9uek*) PATH="/opt/rh/gcc-toolset-14/root/usr/bin:$PATH";;
     esac
 
     # Detect if kernel was built with clang.
@@ -622,8 +623,8 @@ create_udev_rule()
             fi
         fi
         ## @todo 60-vboxadd.rules -> 60-vboxguest.rules ?
-        echo "KERNEL=${udev_fix}\"vboxguest\", NAME=\"vboxguest\", OWNER=\"vboxadd\", MODE=\"0660\"" > /etc/udev/rules.d/60-vboxadd.rules
-        echo "KERNEL=${udev_fix}\"vboxuser\", NAME=\"vboxuser\", OWNER=\"vboxadd\", MODE=\"0666\"" >> /etc/udev/rules.d/60-vboxadd.rules
+        echo "KERNEL=${udev_fix}\"vboxguest\", OWNER=\"vboxadd\", MODE=\"0660\"" > /etc/udev/rules.d/60-vboxadd.rules
+        echo "KERNEL=${udev_fix}\"vboxuser\", OWNER=\"vboxadd\", MODE=\"0666\"" >> /etc/udev/rules.d/60-vboxadd.rules
         # Make sure the new rule is noticed.
         udevadm control --reload >/dev/null 2>&1 || true
         udevcontrol reload_rules >/dev/null 2>&1 || true
@@ -1041,13 +1042,22 @@ check_status_kernel()
             # Do not spoil $?.
             true
         fi
+    else
+        false
     fi
 
     # Module vboxvideo is optional and expected to be loaded only when VM is
     # running VBoxVGA or VBoxSVGA graphics.
     if [ $? -eq 0 ]; then
         gpu_vendor=$(lspci | grep 'VGA compatible controller' | cut -d ' ' -f 5 2>/dev/null)
-        if [ "$gpu_vendor" = "InnoTek" ]; then
+
+        # vboxvideo is not installed for kernels 3.10.x and older.
+        have_vboxvideo=
+        if [ "$(printf '%s\n%s\n' "3.10" "$(uname -r)" | sort -Vr | head -1)" = "$(uname -r)" ]; then
+            have_vboxvideo="1"
+        fi
+
+        if [ -n "$have_vboxvideo" -a "$gpu_vendor" = "InnoTek" ]; then
             check_running_module "vboxvideo"
         else
             # Do not spoil $?.
